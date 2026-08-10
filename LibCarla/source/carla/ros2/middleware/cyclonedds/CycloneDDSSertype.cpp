@@ -28,9 +28,21 @@ struct ddsi_serdata* carla_cdr_alloc_serdata(
     enum ddsi_serdata_kind kind,
     uint32_t cdr_size)
 {
+  if (!type) {
+    log_error("carla_cdr_alloc_serdata: null sertype");
+    return nullptr;
+  }
   void* mem = malloc(sizeof(struct carla_cdr_serdata) + static_cast<size_t>(cdr_size));
   if (!mem) { return nullptr; }
   struct carla_cdr_serdata* csd = reinterpret_cast<struct carla_cdr_serdata*>(mem);
+  // HMC debug: CycloneDDS may intern a sertype without preserving the custom
+  // serdata_ops pointer. Restore it before ddsi_serdata_init so the write path
+  // does not dereference a null ops table.
+  if (!type->serdata_ops) {
+    log_warning("carla_cdr_alloc_serdata: restoring null serdata_ops for type '",
+                type->type_name ? type->type_name : "?", "'");
+    const_cast<struct ddsi_sertype*>(type)->serdata_ops = &carla_cdr_serdata_ops;
+  }
   ddsi_serdata_init(&csd->sd, type, kind);
   csd->cdr_size = cdr_size;
   return &csd->sd;

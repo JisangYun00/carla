@@ -125,25 +125,39 @@ void ROS2::SetTimestamp(double timestamp) {
  
   _clock_publisher->Write(_seconds, _nanoseconds);
   _clock_publisher->Publish();
+}
 
-  // HMC FB-01 feedback publisher: publish vehicle state at simulation clock rate.
-  // [TODO] replace with a dedicated per-vehicle tick path; for now we publish the
-  //        first registered vehicle's state as a proof of integration.
+void ROS2::PublishHmcFeedback(
+    void* /*actor*/,
+    float aps_pct,
+    float bps_pct,
+    float actual_speed_kmh,
+    float target_speed_echo_kmh,
+    float actual_swa_deg,
+    float target_swa_echo_deg,
+    uint8_t lng_op_mode,
+    uint8_t lat_op_mode,
+    bool actuator_fault) {
+  std::lock_guard<std::recursive_mutex> lock(_mutex);
+  if (!_enabled) {
+    return;
+  }
   if (!_hmc_feedback_publisher) {
     _hmc_feedback_publisher = std::make_shared<HmcFeedbackPublisher>();
   }
-  // Find a registered vehicle and fill FB-01.
-  if (!_actor_callbacks.empty()) {
-    void* actor = _actor_callbacks.begin()->first;
-    auto callback = _actor_callbacks.begin()->second;
-    // Callback writes control into the vehicle; we cannot directly read physics
-    // from here without UE actor access, so the actual Write() must be driven
-    // from the game thread (CarlaEngine::OnPreTick).  This placeholder keeps the
-    // publisher alive and publishes a zeroed sample.
-    _hmc_feedback_publisher->Write(
-        0u, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0u, 0u, false);
-    _hmc_feedback_publisher->Publish();
-  }
+  static uint8_t s_alive_counter = 0u;
+  _hmc_feedback_publisher->Write(
+      s_alive_counter++,
+      aps_pct,
+      bps_pct,
+      actual_speed_kmh,
+      target_speed_echo_kmh,
+      actual_swa_deg,
+      target_swa_echo_deg,
+      lng_op_mode,
+      lat_op_mode,
+      actuator_fault);
+  _hmc_feedback_publisher->Publish();
 }
 
 void ROS2::RegisterActor(void *actor, std::string ros_name, std::string frame_id, bool publish_tf) {

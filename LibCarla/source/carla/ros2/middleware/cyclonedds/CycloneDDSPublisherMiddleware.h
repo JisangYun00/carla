@@ -126,15 +126,30 @@ class CycloneDDSPublisherMiddleware : public IPublisherMiddleware {
     return true;
   }
 
-  bool Publish(void* /*message_data*/) override {
-    // HMC workaround: every CycloneDDSPublisherMiddleware<T>::Publish() hits
-    // a segmentation fault inside ddsi_serdata_init() when allocating a custom
-    // CDR serdata. The custom sertype initialization in the vendored
-    // CycloneDDS 0.10.5 build does not match the CDR passthrough assumptions.
-    // Disable all publisher writes under CycloneDDS while keeping subscribers
-    // alive so that control commands can still be received.
-    log_debug("CycloneDDSPublisherMiddleware::Publish (", _topic_name,
-              "): suppressed (HMC CycloneDDS publisher workaround)");
+  bool Publish(void* message_data) override {
+    const msg_type* msg = static_cast<const msg_type*>(message_data);
+    std::vector<uint8_t> cdr = serialize_to_cdr(*msg);
+
+    struct ddsi_serdata* sd = carla_cdr_wrap(
+        _sertype,
+        cdr.data(),
+        static_cast<uint32_t>(cdr.size()));
+    if (!sd) {
+      log_error("CycloneDDSPublisherMiddleware::Publish (", _topic_name,
+                "): allocation failed");
+      return false;
+    }
+
+    // dds_writecdr() consumes exactly 1 reference from sd on success
+    // (see dds_write.c: "consumes 1 refc from din in all paths").
+    // On failure the reference is NOT consumed, so we must unref manually.
+    dds_return_t rc = dds_writecdr(_writer, sd);
+    if (rc != DDS_RETCODE_OK) {
+      ddsi_serdata_unref(sd);
+      log_error("CycloneDDSPublisherMiddleware::Publish (", _topic_name,
+                "): dds_writecdr failed (code:", rc, ")");
+      return false;
+    }
     return true;
   }
 

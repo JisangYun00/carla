@@ -91,6 +91,20 @@ class ROS2
     void RegisterVehicle(void *actor, std::string ros_name, std::string frame_id, ActorCallback callback);
     void UnregisterVehicle(void *actor);
 
+    // Publish HMC FB-01 feedback for a vehicle.  Filled from the UE4 game
+    // thread where the ACarlaWheeledVehicle pointer is valid.
+    void PublishHmcFeedback(
+        void *actor,
+        float aps_pct,
+        float bps_pct,
+        float actual_speed_kmh,
+        float target_speed_echo_kmh,
+        float actual_swa_deg,
+        float target_swa_echo_deg,
+        uint8_t lng_op_mode,
+        uint8_t lat_op_mode,
+        bool actuator_fault);
+
     // Receiving data to publish
     void ProcessDataFromCamera(
       uint64_t sensor_type,
