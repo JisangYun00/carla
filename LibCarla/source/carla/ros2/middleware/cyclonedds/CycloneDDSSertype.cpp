@@ -10,6 +10,8 @@
 #include "carla/ros2/middleware/MiddlewareConfig.h"
 #include "carla/Logging.h"
 
+#include <dds/ddsi/q_radmin.h>
+
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -49,23 +51,41 @@ static uint32_t carla_cdr_serdata_get_size(const struct ddsi_serdata* d) {
   return reinterpret_cast<const struct carla_cdr_serdata*>(d)->cdr_size;
 }
 
+// HMC patch: reassemble fragmented CycloneDDS samples instead of zero-filling.
+// The previous implementation logged an error and returned invalid zero bytes,
+// which broke ROS2 control reception over CycloneDDS in release builds.
 static struct ddsi_serdata* carla_cdr_from_ser(
     const struct ddsi_sertype* type,
     enum ddsi_serdata_kind kind,
-    const struct nn_rdata* /*fragchain*/,
+    const struct nn_rdata* fragchain,
     size_t size)
 {
-  // Fragment-based receive path. CARLA uses local IPC so this should never
-  // be triggered in practice. Log an error so the caller knows the data is
-  // invalid rather than silently returning zero-filled bytes.
-  log_error(
-      "carla_cdr_from_ser: fragmented receive is not supported; "
-      "data will be invalid");
   struct ddsi_serdata* sd =
       carla_cdr_alloc_serdata(type, kind, static_cast<uint32_t>(size));
-  if (sd) {
-    memset(reinterpret_cast<struct carla_cdr_serdata*>(sd) + 1, 0, size);
+  if (!sd) { return nullptr; }
+
+  uint8_t* dest = reinterpret_cast<uint8_t*>(
+      reinterpret_cast<struct carla_cdr_serdata*>(sd) + 1);
+  std::memset(dest, 0, size);
+
+  uint32_t off = 0u;
+  for (const struct nn_rdata* frag = fragchain; frag; frag = frag->nextfrag) {
+    if (frag->maxp1 <= off) { continue; }
+    const uint32_t n = frag->maxp1 - off;
+    if (n == 0u) { continue; }
+    if (off + n > size) { break; }
+
+    const unsigned char* payload =
+        NN_RMSG_PAYLOADOFF(frag->rmsg, NN_RDATA_PAYLOAD_OFF(frag));
+    memcpy(dest + off, payload + (off - frag->min), static_cast<size_t>(n));
+    off = frag->maxp1;
   }
+
+  if (off != size) {
+    log_warning("carla_cdr_from_ser: fragment chain covered ", off,
+                " of ", size, " bytes; remainder left zero");
+  }
+
   return sd;
 }
 
