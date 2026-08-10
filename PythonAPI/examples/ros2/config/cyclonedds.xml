@@ -1,13 +1,20 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<CycloneDDS xmlns="https://cdds.io/config"
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-            xsi:schemaLocation="https://cdds.io/config https://cdds.io/schema/cyclonedds.xsd">
-    <Domain id="any">
-        <SharedMemory>
-            <Enable>false</Enable>
-        </SharedMemory>
-        <General>
-            <Transport>udp</Transport>
-        </General>
-    </Domain>
+<CycloneDDS>
+  <Domain id="any">
+    <General>
+      <!-- 단일 머신: 루프백 인터페이스 고정 (address= 사용, name= 은 무시됨) -->
+      <Interfaces>
+        <NetworkInterface address="127.0.0.1"/>
+      </Interfaces>
+    </General>
+    <Discovery>
+      <!-- lo는 멀티캐스트 미지원 → 유니캐스트 피어 필수 -->
+      <Peers>
+        <Peer address="127.0.0.1"/>
+      </Peers>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <!-- 연속 실험 시 포트 소진 방지 (좀비 노드 누적 대비 여유 있게) -->
+      <MaxAutoParticipantIndex>120</MaxAutoParticipantIndex>
+    </Discovery>
+  </Domain>
 </CycloneDDS>

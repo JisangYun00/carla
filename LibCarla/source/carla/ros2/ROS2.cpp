@@ -490,6 +490,15 @@ void ROS2::ProcessDataFromMap(const std::string &open_drive) {
     log_warning("ROS2: empty OpenDRIVE description, skipping map publish");
     return;
   }
+  // HMC workaround: skip the latched OpenDRIVE map publish when using the
+  // CycloneDDS middleware. The CarlaMapPublisher currently crashes in
+  // ddsi_serdata_init because the CycloneDDS sertype initialization path in
+  // the vendored 0.10.5 build does not match the custom CDR passthrough
+  // assumptions. The map topic is not required for the HMC control loop.
+  if (MiddlewareFactory::GetMiddleware() == Middleware::CycloneDDS) {
+    log_info("ROS2: skipping OpenDRIVE map publish under CycloneDDS (HMC workaround)");
+    return;
+  }
   if (!_map_publisher) {
     _map_publisher = std::make_shared<CarlaMapPublisher>();
   }
