@@ -45,6 +45,7 @@ namespace ros2 {
   class CarlaTransformPublisher;
   class CarlaClockPublisher;
   class CarlaMapPublisher;
+  class HmcFeedbackPublisher;
 
 class ROS2
 {
@@ -168,6 +169,7 @@ class ROS2
 
   std::shared_ptr<CarlaClockPublisher> _clock_publisher;
   std::shared_ptr<CarlaMapPublisher> _map_publisher;
+  std::shared_ptr<HmcFeedbackPublisher> _hmc_feedback_publisher;
 
   // actor->parent relationship
   std::unordered_map<void *, void *> _actor_parent_map;

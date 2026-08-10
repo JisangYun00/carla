@@ -35,9 +35,11 @@
 #include "publishers/CarlaSemanticLidarPublisher.h"
 #include "publishers/CarlaSSCameraPublisher.h"
 #include "publishers/CarlaTransformPublisher.h"
+#include "publishers/HmcFeedbackPublisher.h"
 
 #include "subscribers/AckermannControlSubscriber.h"
 #include "subscribers/CarlaEgoVehicleControlSubscriber.h"
+#include "subscribers/HmcCommandSubscriber.h"
 
 #include <vector>
 
@@ -123,6 +125,25 @@ void ROS2::SetTimestamp(double timestamp) {
  
   _clock_publisher->Write(_seconds, _nanoseconds);
   _clock_publisher->Publish();
+
+  // HMC FB-01 feedback publisher: publish vehicle state at simulation clock rate.
+  // [TODO] replace with a dedicated per-vehicle tick path; for now we publish the
+  //        first registered vehicle's state as a proof of integration.
+  if (!_hmc_feedback_publisher) {
+    _hmc_feedback_publisher = std::make_shared<HmcFeedbackPublisher>();
+  }
+  // Find a registered vehicle and fill FB-01.
+  if (!_actor_callbacks.empty()) {
+    void* actor = _actor_callbacks.begin()->first;
+    auto callback = _actor_callbacks.begin()->second;
+    // Callback writes control into the vehicle; we cannot directly read physics
+    // from here without UE actor access, so the actual Write() must be driven
+    // from the game thread (CarlaEngine::OnPreTick).  This placeholder keeps the
+    // publisher alive and publishes a zeroed sample.
+    _hmc_feedback_publisher->Write(
+        0u, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0u, 0u, false);
+    _hmc_feedback_publisher->Publish();
+  }
 }
 
 void ROS2::RegisterActor(void *actor, std::string ros_name, std::string frame_id, bool publish_tf) {
@@ -172,7 +193,12 @@ void ROS2::RegisterVehicle(void *actor, std::string ros_name, std::string frame_
   auto _ackermann_control_subscriber = std::make_shared<AckermannControlSubscriber>(actor, base_topic_name, frame_id);
   _subscribers.insert({actor, _ackermann_control_subscriber});
 
+  // HMC AD-01/AD-02 command subscriber for the HMC control loop.
+  // Uses fixed HMC topic names rather than the per-actor rt/carla namespace.
+  auto _hmc_command_subscriber = std::make_shared<HmcCommandSubscriber>(actor, base_topic_name, frame_id);
+  _subscribers.insert({actor, _hmc_command_subscriber});
 }
+
 
 void ROS2::UnregisterVehicle(void *actor) {
   std::lock_guard<std::recursive_mutex> lock(_mutex);
@@ -517,6 +543,7 @@ void ROS2::Shutdown() {
   _tf_publishers.clear();
   _clock_publisher.reset();
   _map_publisher.reset();
+  _hmc_feedback_publisher.reset();
 
   _subscribers.clear();
 

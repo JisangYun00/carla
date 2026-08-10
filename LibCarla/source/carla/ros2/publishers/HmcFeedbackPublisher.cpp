@@ -1,0 +1,71 @@
+// Copyright (c) 2025 Computer Vision Center (CVC) at the Universitat Autonoma de Barcelona (UAB).
+// This work is licensed under the terms of the MIT license.
+// For a copy, see <https://opensource.org/licenses/MIT>.
+
+#include "HmcFeedbackPublisher.h"
+
+#include <cstdint>
+#include <algorithm>
+#include <cmath>
+
+namespace carla {
+namespace ros2 {
+
+namespace {
+  constexpr float kMaxApsPct = 100.0f;
+  constexpr float kMaxBpsPct = 100.0f;
+
+  inline uint16_t saturate_pct(float pct) {
+    float v = pct * kMaxApsPct;  // [VERIFY] scale factor matches HMC spec
+    if (v < 0.0f) return 0u;
+    if (v > kMaxApsPct) return static_cast<uint16_t>(kMaxApsPct);
+    return static_cast<uint16_t>(v);
+  }
+
+  inline int16_t saturate_int16(float v) {
+    if (v < -32768.0f) return -32768;
+    if (v > 32767.0f) return 32767;
+    return static_cast<int16_t>(v);
+  }
+}
+
+bool HmcFeedbackPublisher::Write(
+    uint8_t alive_counter,
+    float aps_pct,
+    float bps_pct,
+    float actual_speed_kmh,
+    float target_speed_echo_kmh,
+    float actual_swa_deg,
+    float target_swa_echo_deg,
+    uint8_t lng_op_mode,
+    uint8_t lat_op_mode,
+    bool actuator_fault) {
+  auto* msg = _impl->GetMessage();
+  if (!msg) {
+    return false;
+  }
+
+  msg->crc = 0u;  // [VERIFY] CRC policy for FB-01
+  msg->alive_cnt = alive_counter;
+  msg->lng_ctrl_ready = 1u;
+  msg->lat_ctrl_ready = 1u;
+  msg->lng_ctrl_type_active = 0u;  // [VERIFY] active control type mapping
+  msg->lat_ctrl_type_active = 0u;
+  msg->gear_sel_ready = 1u;
+  msg->stop_hold_ready = 0u;
+  msg->actuator_fault_sta = actuator_fault ? 1u : 0u;
+  msg->lng_op_mode = lng_op_mode;
+  msg->lat_op_mode = lat_op_mode;
+  msg->aps_fdb_pct = saturate_pct(aps_pct);
+  msg->bps_fdb_pct = saturate_pct(bps_pct);
+  msg->actual_speed_kmh = saturate_int16(actual_speed_kmh);
+  msg->target_speed_echo_kmh = saturate_int16(target_speed_echo_kmh);
+  msg->wheel_tq_fdb_nm = 0;  // [VERIFY] not available from CARLA
+  msg->actual_swa_deg = saturate_int16(actual_swa_deg);
+  msg->target_swa_echo_deg = saturate_int16(target_swa_echo_deg);
+
+  return true;
+}
+
+}  // namespace ros2
+}  // namespace carla

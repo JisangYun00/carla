@@ -15,6 +15,9 @@
 #include "carla/ros2/types/msg/Clock.h"
 #include "carla/ros2/types/msg/Float32.h"
 #include "carla/ros2/types/msg/Header.h"
+#include "carla/ros2/types/msg/HmcAD01.h"
+#include "carla/ros2/types/msg/HmcAD02.h"
+#include "carla/ros2/types/msg/HmcFB01.h"
 #include "carla/ros2/types/msg/Image.h"
 #include "carla/ros2/types/msg/Imu.h"
 #include "carla/ros2/types/msg/NavSatFix.h"
@@ -167,6 +170,40 @@ template<> struct CdrTopicInfo<msg::Header> {
     return "RIHS01_f49fb3ae2cf070f793645ff749683ac6b06203e41c891e17701b1cb597ce6a01";
   }
   static size_t max_serialized_size() { return 268u; }
+};
+
+// HMC interface types.  type_hash is intentionally left as nullptr because
+// the vendored CycloneDDS/FastDDS CDR passthrough does not require REP-2011
+// hashes for interop; setting USER_DATA would require computing the exact
+// RIHS01 values from hmc_interfaces/msg/*.msg.
+template<> struct CdrTopicInfo<msg::HmcAD01> {
+  static const char* type_name() {
+    return "hmc_interfaces::msg::dds_::AD01_";
+  }
+  static const char* type_hash() {
+    return nullptr;
+  }
+  static size_t max_serialized_size() { return 27u; }
+};
+
+template<> struct CdrTopicInfo<msg::HmcAD02> {
+  static const char* type_name() {
+    return "hmc_interfaces::msg::dds_::AD02_";
+  }
+  static const char* type_hash() {
+    return nullptr;
+  }
+  static size_t max_serialized_size() { return 16u; }
+};
+
+template<> struct CdrTopicInfo<msg::HmcFB01> {
+  static const char* type_name() {
+    return "hmc_interfaces::msg::dds_::FB01_";
+  }
+  static const char* type_hash() {
+    return nullptr;
+  }
+  static size_t max_serialized_size() { return 30u; }
 };
 
 template<> struct CdrTopicInfo<msg::Image> {

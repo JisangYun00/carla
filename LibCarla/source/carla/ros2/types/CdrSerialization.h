@@ -21,6 +21,9 @@
 #include "carla/ros2/types/msg/Clock.h"
 #include "carla/ros2/types/msg/Float32.h"
 #include "carla/ros2/types/msg/Header.h"
+#include "carla/ros2/types/msg/HmcAD01.h"
+#include "carla/ros2/types/msg/HmcAD02.h"
+#include "carla/ros2/types/msg/HmcFB01.h"
 #include "carla/ros2/types/msg/Image.h"
 #include "carla/ros2/types/msg/Imu.h"
 #include "carla/ros2/types/msg/NavSatFix.h"
@@ -475,6 +478,126 @@ inline void deserialize_cdr(
   cdr >> m.reverse;
   cdr >> m.gear;
   cdr >> m.manual_gear_shift;
+}
+
+// --
+
+inline void serialize_cdr(
+    eprosima::fastcdr::Cdr& cdr, const msg::HmcAD01& m) {
+  cdr << m.crc;
+  cdr << m.alive_cnt;
+  cdr << m.lng_ctrl_engage_req;
+  cdr << m.lat_ctrl_engage_req;
+  cdr << m.lng_ctrl_type;
+  cdr << m.lat_ctrl_type;
+  cdr << m.target_gear;
+  cdr << m.target_aps_pct;
+  cdr << m.target_bps_pct;
+  cdr << m.stop_hold_req;
+  cdr << m.target_speed_kmh;
+  cdr << m.target_wheel_tq_nm;
+  cdr << m.target_swa_deg;
+  cdr << m.target_steer_tq_nm;
+}
+
+inline void deserialize_cdr(
+    eprosima::fastcdr::Cdr& cdr, msg::HmcAD01& m) {
+  cdr >> m.crc;
+  cdr >> m.alive_cnt;
+  cdr >> m.lng_ctrl_engage_req;
+  cdr >> m.lat_ctrl_engage_req;
+  cdr >> m.lng_ctrl_type;
+  cdr >> m.lat_ctrl_type;
+  cdr >> m.target_gear;
+  cdr >> m.target_aps_pct;
+  cdr >> m.target_bps_pct;
+  cdr >> m.stop_hold_req;
+  cdr >> m.target_speed_kmh;
+  cdr >> m.target_wheel_tq_nm;
+  cdr >> m.target_swa_deg;
+  cdr >> m.target_steer_tq_nm;
+}
+
+// --
+
+inline void serialize_cdr(
+    eprosima::fastcdr::Cdr& cdr, const msg::HmcAD02& m) {
+  cdr << m.crc;
+  cdr << m.alive_cnt;
+  cdr << m.emgc_brk_active;
+  cdr << m.emgc_steer_active;
+  cdr << m.emgc_brk_stop_hold;
+  cdr << m.emgc_brk_mode;
+  cdr << m.emgc_decel_tgt_g;
+  cdr << m.emgc_steer_ang_tgt_deg;
+  cdr << m.emgc_accel_tgt_g;
+  cdr << m.emgc_accel_mode;
+  cdr << m.emgc_accel_active;
+  cdr << m.emgc_reason_code;
+  cdr << m.driver_takeover_req;
+}
+
+inline void deserialize_cdr(
+    eprosima::fastcdr::Cdr& cdr, msg::HmcAD02& m) {
+  cdr >> m.crc;
+  cdr >> m.alive_cnt;
+  cdr >> m.emgc_brk_active;
+  cdr >> m.emgc_steer_active;
+  cdr >> m.emgc_brk_stop_hold;
+  cdr >> m.emgc_brk_mode;
+  cdr >> m.emgc_decel_tgt_g;
+  cdr >> m.emgc_steer_ang_tgt_deg;
+  cdr >> m.emgc_accel_tgt_g;
+  cdr >> m.emgc_accel_mode;
+  cdr >> m.emgc_accel_active;
+  cdr >> m.emgc_reason_code;
+  cdr >> m.driver_takeover_req;
+}
+
+// --
+
+inline void serialize_cdr(
+    eprosima::fastcdr::Cdr& cdr, const msg::HmcFB01& m) {
+  cdr << m.crc;
+  cdr << m.alive_cnt;
+  cdr << m.lng_ctrl_ready;
+  cdr << m.lat_ctrl_ready;
+  cdr << m.lng_ctrl_type_active;
+  cdr << m.lat_ctrl_type_active;
+  cdr << m.gear_sel_ready;
+  cdr << m.stop_hold_ready;
+  cdr << m.actuator_fault_sta;
+  cdr << m.lng_op_mode;
+  cdr << m.lat_op_mode;
+  cdr << m.aps_fdb_pct;
+  cdr << m.bps_fdb_pct;
+  cdr << m.actual_speed_kmh;
+  cdr << m.target_speed_echo_kmh;
+  cdr << m.wheel_tq_fdb_nm;
+  cdr << m.actual_swa_deg;
+  cdr << m.target_swa_echo_deg;
+}
+
+inline void deserialize_cdr(
+    eprosima::fastcdr::Cdr& cdr, msg::HmcFB01& m) {
+  cdr >> m.crc;
+  cdr >> m.alive_cnt;
+  cdr >> m.lng_ctrl_ready;
+  cdr >> m.lat_ctrl_ready;
+  cdr >> m.lng_ctrl_type_active;
+  cdr >> m.lat_ctrl_type_active;
+  cdr >> m.gear_sel_ready;
+  cdr >> m.stop_hold_ready;
+  cdr >> m.actuator_fault_sta;
+  cdr >> m.lng_op_mode;
+  cdr >> m.lat_op_mode;
+  cdr >> m.aps_fdb_pct;
+  cdr >> m.bps_fdb_pct;
+  cdr >> m.actual_speed_kmh;
+  cdr >> m.target_speed_echo_kmh;
+  cdr >> m.wheel_tq_fdb_nm;
+  cdr >> m.actual_swa_deg;
+  cdr >> m.target_swa_echo_deg;
 }
 
 // --
