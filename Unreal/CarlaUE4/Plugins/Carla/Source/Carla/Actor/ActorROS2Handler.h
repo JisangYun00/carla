@@ -19,6 +19,7 @@ class ActorROS2Handler
 
     void operator()(carla::ros2::VehicleControl &Source);
     void operator()(carla::ros2::AckermannControl &Source);
+    void PublishHmcFeedback();
 
     private:
         AActor *_Actor {nullptr};

@@ -12,19 +12,18 @@ namespace ros2 {
   // Conversion helpers from HMC raw/physical units to CARLA VehicleControl.
   // [VERIFY] scale factors match vehicle-specific APS/BPS calibration.
   namespace {
-    constexpr float kMaxSteerAngleDeg = 540.0f;   // HMC AD-01 swa raw -> physical range
-    constexpr float kMaxApsPct = 100.0f;
+    constexpr float kMaxSteerAngleDeg = 540.0f;
+    constexpr float kRawToPhysical = 0.1f;
 
-    inline float deg_to_steer_ratio(float deg) {
-      // CARLA steer is [-1, 1] representing full lock; map from deg assuming
-      // max steer angle.  HMC AD-01 target_swa_deg is int16 physical.
-      return deg / kMaxSteerAngleDeg;
+    inline float deg_to_steer_ratio(int16_t raw_deg) {
+      // AD-01 SWA has a 0.1 deg factor; CARLA steer is full-lock [-1, 1].
+      const float ratio = raw_deg * kRawToPhysical / kMaxSteerAngleDeg;
+      return std::min(1.0f, std::max(-1.0f, ratio));
     }
 
-    inline float pct_to_throttle(uint16_t pct) {
-      // HMC APS percent 0..10000 raw -> 0..100 physical after scale factor.
-      // Here we assume raw value already in physical percent.
-      return std::min(1.0f, std::max(0.0f, pct / kMaxApsPct));
+    inline float pct_to_throttle(uint16_t raw_pct) {
+      // AD-01 APS/BPS has a 0.1 percent factor.
+      return std::min(1.0f, raw_pct * kRawToPhysical / 100.0f);
     }
   }
 
@@ -40,7 +39,7 @@ namespace ros2 {
 
     // Normal command (AD-01)
     if (ad01.lat_ctrl_engage_req && ad01.target_swa_deg != 0) {
-      control.steer = deg_to_steer_ratio(static_cast<float>(ad01.target_swa_deg));
+      control.steer = deg_to_steer_ratio(ad01.target_swa_deg);
     }
     if (ad01.lng_ctrl_engage_req) {
       control.throttle = pct_to_throttle(ad01.target_aps_pct);
@@ -53,7 +52,7 @@ namespace ros2 {
       control.throttle = 0.0f;
     }
     if (ad02.emgc_steer_active) {
-      control.steer = deg_to_steer_ratio(static_cast<float>(ad02.emgc_steer_ang_tgt_deg));
+      control.steer = deg_to_steer_ratio(ad02.emgc_steer_ang_tgt_deg);
     }
 
     control.gear = static_cast<int32_t>(ad01.target_gear);

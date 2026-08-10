@@ -128,7 +128,7 @@ void ROS2::SetTimestamp(double timestamp) {
 }
 
 void ROS2::PublishHmcFeedback(
-    void* /*actor*/,
+    void* actor,
     float aps_pct,
     float bps_pct,
     float actual_speed_kmh,
@@ -139,7 +139,7 @@ void ROS2::PublishHmcFeedback(
     uint8_t lat_op_mode,
     bool actuator_fault) {
   std::lock_guard<std::recursive_mutex> lock(_mutex);
-  if (!_enabled) {
+  if (!_enabled || _actor_callbacks.find(actor) == _actor_callbacks.end()) {
     return;
   }
   if (!_hmc_feedback_publisher) {

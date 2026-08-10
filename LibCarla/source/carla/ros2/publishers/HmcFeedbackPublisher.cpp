@@ -12,20 +12,21 @@ namespace carla {
 namespace ros2 {
 
 namespace {
-  constexpr float kMaxApsPct = 100.0f;
-  constexpr float kMaxBpsPct = 100.0f;
+  constexpr float kPhysicalToRaw = 10.0f;
+  constexpr float kMaxPctRaw = 1023.0f;
 
   inline uint16_t saturate_pct(float pct) {
-    float v = pct * kMaxApsPct;  // [VERIFY] scale factor matches HMC spec
-    if (v < 0.0f) return 0u;
-    if (v > kMaxApsPct) return static_cast<uint16_t>(kMaxApsPct);
-    return static_cast<uint16_t>(v);
+    const float raw = pct * kPhysicalToRaw;  // HMC factor: 0.1 percent
+    if (raw < 0.0f) return 0u;
+    if (raw > kMaxPctRaw) return static_cast<uint16_t>(kMaxPctRaw);
+    return static_cast<uint16_t>(raw);
   }
 
-  inline int16_t saturate_int16(float v) {
-    if (v < -32768.0f) return -32768;
-    if (v > 32767.0f) return 32767;
-    return static_cast<int16_t>(v);
+  inline int16_t saturate_int16(float physical) {
+    const float raw = physical * kPhysicalToRaw;  // HMC factor: 0.1
+    if (raw < -32768.0f) return -32768;
+    if (raw > 32767.0f) return 32767;
+    return static_cast<int16_t>(raw);
   }
 }
 

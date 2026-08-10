@@ -28,32 +28,36 @@ void ActorROS2Handler::operator()(carla::ros2::VehicleControl &Source)
   NewControl.Gear = Source.gear;
 
   Vehicle->ApplyVehicleControl(NewControl, EVehicleInputPriority::User);
+  PublishHmcFeedback();
 
-  // Publish HMC FB-01 feedback using the resulting vehicle state.
+}
+
+void ActorROS2Handler::PublishHmcFeedback()
+{
+  ACarlaWheeledVehicle *Vehicle = Cast<ACarlaWheeledVehicle>(_Actor);
+  if (!Vehicle) return;
+
   auto ROS2 = carla::ros2::ROS2::GetInstance();
-  if (ROS2 && ROS2->IsEnabled())
-  {
-    const float SpeedCmS = Vehicle->GetVehicleForwardSpeed();
-    const float SpeedKmh = SpeedCmS * 0.036f;  // cm/s -> km/h
-    const float SteerDeg = NewControl.Steer * 540.0f;  // [VERIFY] max steer angle
-    const int32 CurrentGear = Vehicle->GetVehicleCurrentGear();
-    // Simple actuator-fault heuristic: non-finite command or out-of-range steer.
-    const bool bActuatorFault =
-        !FMath::IsFinite(NewControl.Throttle) ||
-        !FMath::IsFinite(NewControl.Steer) ||
-        FMath::Abs(NewControl.Steer) > 1.0f;
-    ROS2->PublishHmcFeedback(
-        _Actor,
-        NewControl.Throttle * 100.0f,    // aps_fdb_pct physical 0..100
-        NewControl.Brake * 100.0f,       // bps_fdb_pct physical 0..100
-        SpeedKmh,
-        0.0f,                            // target_speed_echo_kmh [TODO]
-        SteerDeg,
-        SteerDeg,                        // target_swa_echo_deg [TODO]
-        0x01,                            // lng_op_mode [VERIFY]
-        0x01,                            // lat_op_mode [VERIFY]
-        bActuatorFault);
-  }
+  if (!ROS2 || !ROS2->IsEnabled()) return;
+
+  const FVehicleControl &Control = Vehicle->GetVehicleControl();
+  const float SpeedKmh = Vehicle->GetVehicleForwardSpeed() * 0.036f;
+  const float SteerDeg = Control.Steer * 540.0f;  // [VERIFY] max steer angle
+  const bool bActuatorFault =
+      !FMath::IsFinite(Control.Throttle) ||
+      !FMath::IsFinite(Control.Steer) ||
+      !FMath::IsFinite(Control.Brake);
+  ROS2->PublishHmcFeedback(
+      _Actor,
+      Control.Throttle * 100.0f,
+      Control.Brake * 100.0f,
+      SpeedKmh,
+      0.0f,                    // target_speed_echo_kmh [TODO]
+      SteerDeg,
+      SteerDeg,                // target_swa_echo_deg [TODO]
+      0x01,                    // lng_op_mode [VERIFY]
+      0x01,                    // lat_op_mode [VERIFY]
+      bActuatorFault);
 }
 
 void ActorROS2Handler::operator()(carla::ros2::AckermannControl &Source)
