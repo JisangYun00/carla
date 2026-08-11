@@ -14,6 +14,7 @@
 #include <carla/ros2/middleware/MiddlewareFactory.h>
 #include <carla/ros2/middleware/IPublisherMiddleware.h>
 #include <carla/ros2/middleware/ISubscriberMiddleware.h>
+#include <carla/ros2/publishers/CarlaIMUPublisher.h>
 #include <carla/ros2/publishers/PublisherImpl.h>
 #include <carla/ros2/subscribers/SubscriberImpl.h>
 #include <carla/ros2/middleware/fastdds/GenericCdrPubSubType.h>
@@ -114,6 +115,18 @@ class MiddlewareFactoryFixture : public ::testing::Test {
     MiddlewareFactory::SetMiddleware(Middleware::FastDDS);
   }
 };
+
+// ==========================================================================
+// IMU compass convention
+// ==========================================================================
+
+TEST(carla_imu_publisher, compass_converts_to_ros_enu_yaw) {
+  constexpr float kPi = 3.1415926535897932f;
+  EXPECT_NEAR(CompassToRosYaw(kPi / 2.0f), 0.0f, 1e-6f);          // East
+  EXPECT_NEAR(CompassToRosYaw(0.0f), kPi / 2.0f, 1e-6f);          // North
+  EXPECT_NEAR(CompassToRosYaw(kPi), -kPi / 2.0f, 1e-6f);          // South
+  EXPECT_NEAR(CompassToRosYaw(3.0f * kPi / 2.0f), -kPi, 1e-6f);  // West
+}
 
 // ==========================================================================
 // Group 1: middleware_to_string (3 tests)

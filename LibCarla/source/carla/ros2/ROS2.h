@@ -215,7 +215,7 @@ class ROS2
   std::shared_ptr<HmcFeedbackPublisher> _hmc_feedback_publisher;
   std::shared_ptr<HmcVehicleStatusPublisher> _hmc_vehicle_status_publisher;
   std::shared_ptr<HmcVehicleConfigPublisher> _hmc_vehicle_config_publisher;
-  bool _hmc_vehicle_config_published {false};
+  std::unordered_set<void*> _hmc_vehicle_config_published;
 
   // HMC feedback callbacks registered by hero vehicles. Invoked from
   // SetTimestamp at the configured feedback period.

@@ -16,6 +16,12 @@
 namespace carla {
 namespace ros2 {
 
+  // CARLA compass is clockwise from North; ROS ENU yaw is counter-clockwise
+  // from East. Cardinal checks: East π/2→0, North 0→π/2.
+  constexpr float CompassToRosYaw(float compass) {
+    return 1.5707963267948966f - compass;
+  }
+
   class CarlaIMUPublisher : public BasePublisher {
     public:
       struct ImuMsgTraits {

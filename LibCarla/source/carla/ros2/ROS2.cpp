@@ -208,7 +208,7 @@ void ROS2::PublishHmcVehicleConfig(
   if (!_enabled || _actor_callbacks.find(actor) == _actor_callbacks.end()) {
     return;
   }
-  if (_hmc_vehicle_config_published) return;
+  if (_hmc_vehicle_config_published.count(actor) != 0u) return;
   if (!_hmc_vehicle_config_publisher) {
     _hmc_vehicle_config_publisher = std::make_shared<HmcVehicleConfigPublisher>();
   }
@@ -216,7 +216,7 @@ void ROS2::PublishHmcVehicleConfig(
       _seconds, _nanoseconds, frame_id,
       vehicle_width_m, vehicle_length_m, ignition_default_on);
   _hmc_vehicle_config_publisher->Publish();
-  _hmc_vehicle_config_published = true;
+  _hmc_vehicle_config_published.insert(actor);
 }
 
 void ROS2::RegisterActor(void *actor, std::string ros_name, std::string frame_id, bool publish_tf) {
@@ -279,6 +279,7 @@ void ROS2::UnregisterVehicle(void *actor) {
   _actor_callbacks.erase(actor);
   _subscribers.erase(actor);
   _hmc_feedback_callbacks.erase(actor);
+  _hmc_vehicle_config_published.erase(actor);
 }
 
 void ROS2::RegisterHmcFeedbackCallback(void* actor, ROS2::HmcFeedbackCallback callback) {
@@ -626,6 +627,7 @@ void ROS2::Shutdown() {
   _hmc_feedback_publisher.reset();
   _hmc_vehicle_status_publisher.reset();
   _hmc_vehicle_config_publisher.reset();
+  _hmc_vehicle_config_published.clear();
 
   _subscribers.clear();
 
