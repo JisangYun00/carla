@@ -31,7 +31,7 @@ void ActorROS2Handler::PublishHmcVehicleStatus()
   // valid_flags: gear | brake | speed | swa | ignition
   const uint64_t ValidFlags = (1u<<0) | (1u<<1) | (1u<<5) | (1u<<6) | (1u<<7);
   ROS2->PublishHmcVehicleStatus(
-      _Actor, _RosName,
+      _Actor, "vehicle",
       CurrentGear, BrakeStatus,
       SpeedKmh, ActualSwaDeg,
       1u, ValidFlags);
@@ -46,9 +46,12 @@ void ActorROS2Handler::PublishHmcVehicleConfig()
   if (!ROS2 || !ROS2->IsEnabled()) return;
 
   const FVector Extent = Vehicle->GetVehicleBoundingBoxExtent();
+  // UE4 bounding box is in centimeters; convert to meters.
+  const float WidthM = Extent.Y * 2.0f * 0.01f;
+  const float LengthM = Extent.X * 2.0f * 0.01f;
   ROS2->PublishHmcVehicleConfig(
-      _Actor, _RosName,
-      Extent.Y * 2.0f, Extent.X * 2.0f, 1u);
+      _Actor, "vehicle",
+      WidthM, LengthM, 1u);
 }
 
 void ActorROS2Handler::operator()(carla::ros2::VehicleControl &Source)

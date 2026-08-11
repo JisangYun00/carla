@@ -27,7 +27,8 @@ namespace ros2 {
       HmcVehicleConfigPublisher() :
         BasePublisher("rt/ads/vehicle"),
         _impl(std::make_shared<PublisherImpl<Traits>>()) {
-          if (!_impl->Init("rt/ads/vehicle/configuration")) {
+          if (!_impl->Init("rt/ads/vehicle/configuration", PublisherQos{
+              DurabilityKind::TransientLocal, ReliabilityKind::Reliable, 1u})) {
             log_warning("HmcVehicleConfigPublisher: Init failed");
           }
       }
