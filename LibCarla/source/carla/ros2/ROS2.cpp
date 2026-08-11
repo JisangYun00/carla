@@ -122,9 +122,21 @@ void ROS2::SetTimestamp(double timestamp) {
   const double multiplier = 1000000000.0;
   _seconds = static_cast<int32_t>(integral);
   _nanoseconds = static_cast<uint32_t>(fractional * multiplier);
- 
+
   _clock_publisher->Write(_seconds, _nanoseconds);
   _clock_publisher->Publish();
+
+  // HMC: publish FB-01 at 10 ms independently of command arrival.
+  const auto now = std::chrono::steady_clock::now();
+  if (now - _last_hmc_feedback_publish >= kHmcFeedbackPeriod) {
+    if (!_hmc_feedback_publisher) {
+      _hmc_feedback_publisher = std::make_shared<HmcFeedbackPublisher>();
+    }
+    for (auto& pair : _hmc_feedback_callbacks) {
+      pair.second();
+    }
+    _last_hmc_feedback_publish = now;
+  }
 }
 
 void ROS2::PublishHmcFeedback(
@@ -219,6 +231,13 @@ void ROS2::UnregisterVehicle(void *actor) {
   UnregisterActor(actor);
   _actor_callbacks.erase(actor);
   _subscribers.erase(actor);
+  _hmc_feedback_callbacks.erase(actor);
+}
+
+void ROS2::RegisterHmcFeedbackCallback(void* actor, ROS2::HmcFeedbackCallback callback) {
+  std::lock_guard<std::recursive_mutex> lock(_mutex);
+  if (!actor || !callback) return;
+  _hmc_feedback_callbacks[actor] = std::move(callback);
 }
 
 std::string ROS2::GetActorRosName(void *actor) {

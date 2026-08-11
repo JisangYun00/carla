@@ -213,11 +213,18 @@ FCarlaActor* UActorDispatcher::RegisterActor(
       }
       else if (Vehicle != nullptr && Description.GetAttribute("role_name").Value == "hero")
       {
-        ROS2->RegisterVehicle(static_cast<void*>(&Actor), RosName, RosName, [RosName](void *Actor, carla::ros2::ROS2CallbackData Data) -> void
+        void* actor_ptr = static_cast<void*>(&Actor);
+        AActor* ue_actor = &Actor;
+        ROS2->RegisterVehicle(actor_ptr, RosName, RosName,
+          [ue_actor](void* /*Actor*/, carla::ros2::ROS2CallbackData Data) -> void
           {
-            AActor *UEActor = reinterpret_cast<AActor *>(Actor);
-            ActorROS2Handler Handler(UEActor, RosName);
+            ActorROS2Handler Handler(ue_actor, "");
             boost::variant2::visit(Handler, Data);
+          });
+        ROS2->RegisterHmcFeedbackCallback(actor_ptr,
+          [ue_actor]() {
+            ActorROS2Handler Handler(ue_actor, "");
+            Handler.PublishHmcFeedback();
           });
       }
     }

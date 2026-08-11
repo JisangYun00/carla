@@ -14,9 +14,11 @@
 #include "carla/ros2/middleware/MiddlewareConfig.h"
 #include "carla/streaming/detail/Types.h"
 
+#include <chrono>
+#include <functional>
 #include <mutex>
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <vector>
 
@@ -90,6 +92,12 @@ class ROS2
 
     void RegisterVehicle(void *actor, std::string ros_name, std::string frame_id, ActorCallback callback);
     void UnregisterVehicle(void *actor);
+
+    // Register a callback that publishes HMC FB-01 from the UE4 game thread.
+    // Called once per registered hero vehicle. ROS2::SetTimestamp invokes it at
+    // the configured HMC feedback period (default 10 ms).
+    using HmcFeedbackCallback = std::function<void()>;
+    void RegisterHmcFeedbackCallback(void* actor, HmcFeedbackCallback callback);
 
     // Publish HMC FB-01 feedback for a vehicle.  Filled from the UE4 game
     // thread where the ACarlaWheeledVehicle pointer is valid.
@@ -184,6 +192,12 @@ class ROS2
   std::shared_ptr<CarlaClockPublisher> _clock_publisher;
   std::shared_ptr<CarlaMapPublisher> _map_publisher;
   std::shared_ptr<HmcFeedbackPublisher> _hmc_feedback_publisher;
+
+  // HMC feedback callbacks registered by hero vehicles. Invoked from
+  // SetTimestamp at the configured feedback period.
+  std::unordered_map<void*, HmcFeedbackCallback> _hmc_feedback_callbacks;
+  std::chrono::steady_clock::time_point _last_hmc_feedback_publish;
+  static constexpr auto kHmcFeedbackPeriod = std::chrono::milliseconds(10);
 
   // actor->parent relationship
   std::unordered_map<void *, void *> _actor_parent_map;

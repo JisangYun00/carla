@@ -4,6 +4,8 @@
 
 #include "HmcCommandSubscriber.h"
 
+#include <chrono>
+
 #include "carla/ros2/ROS2CallbackData.h"
 
 namespace carla {
@@ -28,17 +30,32 @@ namespace ros2 {
   }
 
   ROS2CallbackData HmcCommandSubscriber::GetMessage() {
-    auto ad01 = _ad01_impl->HasNewMessage() ? _ad01_impl->GetMessage() : _latest_ad01;
-    auto ad02 = _ad02_impl->HasNewMessage() ? _ad02_impl->GetMessage() : _latest_ad02;
+    const bool ad01_new = _ad01_impl->HasNewMessage();
+    const bool ad02_new = _ad02_impl->HasNewMessage();
+
+    if (ad01_new || ad02_new) {
+      _last_command_time = std::chrono::steady_clock::now();
+    }
+
+    auto ad01 = ad01_new ? _ad01_impl->GetMessage() : _latest_ad01;
+    auto ad02 = ad02_new ? _ad02_impl->GetMessage() : _latest_ad02;
 
     // Cache latest values so AD-01/02 arriving at different times still merge.
-    _latest_ad01 = ad01;
-    _latest_ad02 = ad02;
+    if (ad01_new) _latest_ad01 = ad01;
+    if (ad02_new) _latest_ad02 = ad02;
 
     VehicleControl control{};
 
+    // Command timeout: fail-safe brake if no fresh AD-01/AD-02.
+    if (!HasFreshCommand()) {
+      control.brake = 1.0f;
+      control.throttle = 0.0f;
+      control.steer = 0.0f;
+      return control;
+    }
+
     // Normal command (AD-01)
-    if (ad01.lat_ctrl_engage_req && ad01.target_swa_deg != 0) {
+    if (ad01.lat_ctrl_engage_req) {
       control.steer = deg_to_steer_ratio(ad01.target_swa_deg);
     }
     if (ad01.lng_ctrl_engage_req) {
@@ -46,7 +63,7 @@ namespace ros2 {
       control.brake = pct_to_throttle(ad01.target_bps_pct);
     }
 
-    // Emergency override (AD-02)
+    // Emergency override (AD-02) takes precedence.
     if (ad02.emgc_brk_active) {
       control.brake = 1.0f;
       control.throttle = 0.0f;
@@ -55,17 +72,50 @@ namespace ros2 {
       control.steer = deg_to_steer_ratio(ad02.emgc_steer_ang_tgt_deg);
     }
 
-    control.gear = static_cast<int32_t>(ad01.target_gear);
-    control.reverse = (ad01.target_gear == 0x02); // [VERIFY] gear reverse encoding
+    // Map HMC gear enum to CARLA VehicleControl fields.
+    // HMC: 1=P, 2=R, 3=N, 5=D.  [VERIFY] against vehicle-specific transmission.
+    switch (ad01.target_gear) {
+      case 0x01:  // Park
+        control.gear = 0;
+        control.hand_brake = true;
+        control.reverse = false;
+        break;
+      case 0x02:  // Reverse
+        control.gear = -1;
+        control.hand_brake = false;
+        control.reverse = true;
+        break;
+      case 0x03:  // Neutral
+        control.gear = 0;
+        control.hand_brake = false;
+        control.reverse = false;
+        break;
+      case 0x05:  // Drive
+        control.gear = 1;
+        control.hand_brake = false;
+        control.reverse = false;
+        break;
+      default:
+        control.gear = 0;
+        control.hand_brake = true;
+        control.reverse = false;
+        break;
+    }
+
+    if (ad01.stop_hold_req != 0u) {
+      control.hand_brake = true;
+    }
 
     return control;
   }
 
+  bool HmcCommandSubscriber::HasFreshCommand() const {
+    return std::chrono::steady_clock::now() - _last_command_time < kCommandTimeout;
+  }
+
   void HmcCommandSubscriber::ProcessMessages(ActorCallback callback) {
-    if (_ad01_impl->HasNewMessage() || _ad02_impl->HasNewMessage()) {
-      auto control = this->GetMessage();
-      callback(this->GetActor(), control);
-    }
+    auto control = this->GetMessage();
+    callback(this->GetActor(), control);
   }
 
 }  // namespace ros2

@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include <compiler/disable-ue4-macros.h>
 #include "carla/ros2/ROS2.h"
 #include <compiler/enable-ue4-macros.h>
@@ -24,4 +26,9 @@ class ActorROS2Handler
     private:
         AActor *_Actor {nullptr};
         std::string _RosName;
+
+        // Last commanded values remembered for FB-01 target echo.
+        float _last_target_steer_ratio {0.0f};
+        bool _last_stop_hold {false};
+        uint8_t _last_target_gear {0x03}; // Neutral
 };
