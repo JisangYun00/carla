@@ -63,12 +63,12 @@ namespace ros2 {
       control.brake = pct_to_throttle(ad01.target_bps_pct);
     }
 
-    // Emergency override (AD-02) takes precedence.
-    if (ad02.emgc_brk_active) {
+    // Emergency override (AD-02) takes precedence only when a fresh AD-02 arrives.
+    if (ad02_new && ad02.emgc_brk_active) {
       control.brake = 1.0f;
       control.throttle = 0.0f;
     }
-    if (ad02.emgc_steer_active) {
+    if (ad02_new && ad02.emgc_steer_active) {
       control.steer = deg_to_steer_ratio(ad02.emgc_steer_ang_tgt_deg);
     }
 
