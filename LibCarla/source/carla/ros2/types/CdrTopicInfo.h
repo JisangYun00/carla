@@ -18,6 +18,8 @@
 #include "carla/ros2/types/msg/HmcAD01.h"
 #include "carla/ros2/types/msg/HmcAD02.h"
 #include "carla/ros2/types/msg/HmcFB01.h"
+#include "carla/ros2/types/msg/HmcVehicleConfig.h"
+#include "carla/ros2/types/msg/HmcVehicleStatus.h"
 #include "carla/ros2/types/msg/Image.h"
 #include "carla/ros2/types/msg/Imu.h"
 #include "carla/ros2/types/msg/NavSatFix.h"
@@ -204,6 +206,26 @@ template<> struct CdrTopicInfo<msg::HmcFB01> {
     return nullptr;
   }
   static size_t max_serialized_size() { return 30u; }
+};
+
+template<> struct CdrTopicInfo<msg::HmcVehicleStatus> {
+  static const char* type_name() {
+    return "ads_interfaces::msg::dds_::VehicleControlUnitState_";
+  }
+  static const char* type_hash() {
+    return nullptr;
+  }
+  static size_t max_serialized_size() { return 300u; }
+};
+
+template<> struct CdrTopicInfo<msg::HmcVehicleConfig> {
+  static const char* type_name() {
+    return "ads_interfaces::msg::dds_::VehicleConfiguration_";
+  }
+  static const char* type_hash() {
+    return nullptr;
+  }
+  static size_t max_serialized_size() { return 284u; }
 };
 
 template<> struct CdrTopicInfo<msg::Image> {

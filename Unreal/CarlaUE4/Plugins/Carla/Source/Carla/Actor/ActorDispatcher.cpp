@@ -225,6 +225,8 @@ FCarlaActor* UActorDispatcher::RegisterActor(
           [ue_actor]() {
             ActorROS2Handler Handler(ue_actor, "");
             Handler.PublishHmcFeedback();
+            Handler.PublishHmcVehicleStatus();
+            Handler.PublishHmcVehicleConfig();
           });
       }
     }

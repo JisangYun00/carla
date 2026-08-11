@@ -24,6 +24,8 @@
 #include "carla/ros2/types/msg/HmcAD01.h"
 #include "carla/ros2/types/msg/HmcAD02.h"
 #include "carla/ros2/types/msg/HmcFB01.h"
+#include "carla/ros2/types/msg/HmcVehicleConfig.h"
+#include "carla/ros2/types/msg/HmcVehicleStatus.h"
 #include "carla/ros2/types/msg/Image.h"
 #include "carla/ros2/types/msg/Imu.h"
 #include "carla/ros2/types/msg/NavSatFix.h"
@@ -598,6 +600,54 @@ inline void deserialize_cdr(
   cdr >> m.wheel_tq_fdb_nm;
   cdr >> m.actual_swa_deg;
   cdr >> m.target_swa_echo_deg;
+}
+
+// --
+
+inline void serialize_cdr(
+    eprosima::fastcdr::Cdr& cdr, const msg::HmcVehicleStatus& m) {
+  serialize_cdr(cdr, m.header);
+  cdr << m.current_gear;
+  cdr << m.brake_status;
+  cdr << m.abs_status;
+  cdr << m.tcs_status;
+  cdr << m.esc_status;
+  cdr << m.vehicle_speed_kmh;
+  cdr << m.actual_swa_deg;
+  cdr << m.ignition_on;
+  cdr << m.valid_flags;
+}
+
+inline void deserialize_cdr(
+    eprosima::fastcdr::Cdr& cdr, msg::HmcVehicleStatus& m) {
+  deserialize_cdr(cdr, m.header);
+  cdr >> m.current_gear;
+  cdr >> m.brake_status;
+  cdr >> m.abs_status;
+  cdr >> m.tcs_status;
+  cdr >> m.esc_status;
+  cdr >> m.vehicle_speed_kmh;
+  cdr >> m.actual_swa_deg;
+  cdr >> m.ignition_on;
+  cdr >> m.valid_flags;
+}
+
+// --
+
+inline void serialize_cdr(
+    eprosima::fastcdr::Cdr& cdr, const msg::HmcVehicleConfig& m) {
+  serialize_cdr(cdr, m.header);
+  cdr << m.vehicle_width_m;
+  cdr << m.vehicle_length_m;
+  cdr << m.ignition_default_on;
+}
+
+inline void deserialize_cdr(
+    eprosima::fastcdr::Cdr& cdr, msg::HmcVehicleConfig& m) {
+  deserialize_cdr(cdr, m.header);
+  cdr >> m.vehicle_width_m;
+  cdr >> m.vehicle_length_m;
+  cdr >> m.ignition_default_on;
 }
 
 // --

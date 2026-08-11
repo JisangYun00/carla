@@ -48,6 +48,8 @@ namespace ros2 {
   class CarlaClockPublisher;
   class CarlaMapPublisher;
   class HmcFeedbackPublisher;
+  class HmcVehicleStatusPublisher;
+  class HmcVehicleConfigPublisher;
 
 class ROS2
 {
@@ -112,6 +114,25 @@ class ROS2
         uint8_t lng_op_mode,
         uint8_t lat_op_mode,
         bool actuator_fault);
+
+    // Publish vehicle control-unit status (speed, gear, brake, SWA).
+    void PublishHmcVehicleStatus(
+        void *actor,
+        const std::string& frame_id,
+        uint8_t current_gear,
+        uint8_t brake_status,
+        float vehicle_speed_kmh,
+        float actual_swa_deg,
+        uint8_t ignition_on,
+        uint64_t valid_flags);
+
+    // Publish vehicle configuration (dimensions). Called once per hero vehicle.
+    void PublishHmcVehicleConfig(
+        void *actor,
+        const std::string& frame_id,
+        float vehicle_width_m,
+        float vehicle_length_m,
+        uint8_t ignition_default_on);
 
     // Receiving data to publish
     void ProcessDataFromCamera(
@@ -192,6 +213,9 @@ class ROS2
   std::shared_ptr<CarlaClockPublisher> _clock_publisher;
   std::shared_ptr<CarlaMapPublisher> _map_publisher;
   std::shared_ptr<HmcFeedbackPublisher> _hmc_feedback_publisher;
+  std::shared_ptr<HmcVehicleStatusPublisher> _hmc_vehicle_status_publisher;
+  std::shared_ptr<HmcVehicleConfigPublisher> _hmc_vehicle_config_publisher;
+  bool _hmc_vehicle_config_published {false};
 
   // HMC feedback callbacks registered by hero vehicles. Invoked from
   // SetTimestamp at the configured feedback period.

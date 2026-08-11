@@ -36,6 +36,8 @@
 #include "publishers/CarlaSSCameraPublisher.h"
 #include "publishers/CarlaTransformPublisher.h"
 #include "publishers/HmcFeedbackPublisher.h"
+#include "publishers/HmcVehicleStatusPublisher.h"
+#include "publishers/HmcVehicleConfigPublisher.h"
 
 #include "subscribers/AckermannControlSubscriber.h"
 #include "subscribers/CarlaEgoVehicleControlSubscriber.h"
@@ -126,7 +128,7 @@ void ROS2::SetTimestamp(double timestamp) {
   _clock_publisher->Write(_seconds, _nanoseconds);
   _clock_publisher->Publish();
 
-  // HMC: publish FB-01 at 10 ms independently of command arrival.
+  // HMC: publish FB-01 and vehicle status at 10 ms independently of command arrival.
   const auto now = std::chrono::steady_clock::now();
   if (now - _last_hmc_feedback_publish >= kHmcFeedbackPeriod) {
     if (!_hmc_feedback_publisher) {
@@ -170,6 +172,51 @@ void ROS2::PublishHmcFeedback(
       lat_op_mode,
       actuator_fault);
   _hmc_feedback_publisher->Publish();
+}
+
+void ROS2::PublishHmcVehicleStatus(
+    void *actor,
+    const std::string& frame_id,
+    uint8_t current_gear,
+    uint8_t brake_status,
+    float vehicle_speed_kmh,
+    float actual_swa_deg,
+    uint8_t ignition_on,
+    uint64_t valid_flags) {
+  std::lock_guard<std::recursive_mutex> lock(_mutex);
+  if (!_enabled || _actor_callbacks.find(actor) == _actor_callbacks.end()) {
+    return;
+  }
+  if (!_hmc_vehicle_status_publisher) {
+    _hmc_vehicle_status_publisher = std::make_shared<HmcVehicleStatusPublisher>();
+  }
+  _hmc_vehicle_status_publisher->Write(
+      _seconds, _nanoseconds, frame_id,
+      current_gear, brake_status,
+      vehicle_speed_kmh, actual_swa_deg,
+      ignition_on, valid_flags);
+  _hmc_vehicle_status_publisher->Publish();
+}
+
+void ROS2::PublishHmcVehicleConfig(
+    void *actor,
+    const std::string& frame_id,
+    float vehicle_width_m,
+    float vehicle_length_m,
+    uint8_t ignition_default_on) {
+  std::lock_guard<std::recursive_mutex> lock(_mutex);
+  if (!_enabled || _actor_callbacks.find(actor) == _actor_callbacks.end()) {
+    return;
+  }
+  if (_hmc_vehicle_config_published) return;
+  if (!_hmc_vehicle_config_publisher) {
+    _hmc_vehicle_config_publisher = std::make_shared<HmcVehicleConfigPublisher>();
+  }
+  _hmc_vehicle_config_publisher->Write(
+      _seconds, _nanoseconds, frame_id,
+      vehicle_width_m, vehicle_length_m, ignition_default_on);
+  _hmc_vehicle_config_publisher->Publish();
+  _hmc_vehicle_config_published = true;
 }
 
 void ROS2::RegisterActor(void *actor, std::string ros_name, std::string frame_id, bool publish_tf) {
@@ -577,6 +624,8 @@ void ROS2::Shutdown() {
   _clock_publisher.reset();
   _map_publisher.reset();
   _hmc_feedback_publisher.reset();
+  _hmc_vehicle_status_publisher.reset();
+  _hmc_vehicle_config_publisher.reset();
 
   _subscribers.clear();
 

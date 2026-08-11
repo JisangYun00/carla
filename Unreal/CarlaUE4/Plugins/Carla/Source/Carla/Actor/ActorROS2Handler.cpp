@@ -10,6 +10,47 @@
 #include "Carla/Vehicle/VehicleControl.h"
 #include "Carla/Vehicle/VehicleAckermannControl.h"
 
+void ActorROS2Handler::PublishHmcVehicleStatus()
+{
+  ACarlaWheeledVehicle *Vehicle = Cast<ACarlaWheeledVehicle>(_Actor);
+  if (!Vehicle) return;
+
+  auto ROS2 = carla::ros2::ROS2::GetInstance();
+  if (!ROS2 || !ROS2->IsEnabled()) return;
+
+  const FVehicleControl &Control = Vehicle->GetVehicleControl();
+  const float SpeedKmh = Vehicle->GetVehicleForwardSpeed() * 0.036f;
+  const float ActualSwaDeg = Control.Steer * 540.0f;  // [VERIFY] max steer angle
+  const int32 Gear = Vehicle->GetVehicleCurrentGear();
+  uint8_t CurrentGear = 5u;  // default forward
+  if (Control.bReverse) CurrentGear = 2u;
+  else if (Control.bHandBrake) CurrentGear = 1u;
+  else if (Gear == 0) CurrentGear = 3u;  // neutral
+  else CurrentGear = 5u;
+  const uint8_t BrakeStatus = (Control.Brake > 0.01f) ? 1u : 0u;
+  // valid_flags: gear | brake | speed | swa | ignition
+  const uint64_t ValidFlags = (1u<<0) | (1u<<1) | (1u<<5) | (1u<<6) | (1u<<7);
+  ROS2->PublishHmcVehicleStatus(
+      _Actor, _RosName,
+      CurrentGear, BrakeStatus,
+      SpeedKmh, ActualSwaDeg,
+      1u, ValidFlags);
+}
+
+void ActorROS2Handler::PublishHmcVehicleConfig()
+{
+  ACarlaWheeledVehicle *Vehicle = Cast<ACarlaWheeledVehicle>(_Actor);
+  if (!Vehicle) return;
+
+  auto ROS2 = carla::ros2::ROS2::GetInstance();
+  if (!ROS2 || !ROS2->IsEnabled()) return;
+
+  const FVector Extent = Vehicle->GetVehicleBoundingBoxExtent();
+  ROS2->PublishHmcVehicleConfig(
+      _Actor, _RosName,
+      Extent.Y * 2.0f, Extent.X * 2.0f, 1u);
+}
+
 void ActorROS2Handler::operator()(carla::ros2::VehicleControl &Source)
 {
   if (!_Actor) return;
