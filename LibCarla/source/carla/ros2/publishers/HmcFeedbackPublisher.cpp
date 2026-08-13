@@ -28,6 +28,10 @@ namespace {
     if (raw > 32767.0f) return 32767;
     return static_cast<int16_t>(raw);
   }
+
+  inline uint8_t clamp_ready(uint8_t value) {
+    return (value == 0u || value == 1u) ? value : 1u;
+  }
 }
 
 bool HmcFeedbackPublisher::Write(
@@ -40,7 +44,10 @@ bool HmcFeedbackPublisher::Write(
     float target_swa_echo_deg,
     uint8_t lng_op_mode,
     uint8_t lat_op_mode,
-    bool actuator_fault) {
+    bool actuator_fault,
+    uint8_t lng_ctrl_ready,
+    uint8_t lat_ctrl_ready,
+    uint8_t gear_sel_ready) {
   auto* msg = _impl->GetMessage();
   if (!msg) {
     return false;
@@ -48,11 +55,11 @@ bool HmcFeedbackPublisher::Write(
 
   msg->crc = 0u;  // [VERIFY] CRC policy for FB-01
   msg->alive_cnt = alive_counter;
-  msg->lng_ctrl_ready = 1u;
-  msg->lat_ctrl_ready = 1u;
+  msg->lng_ctrl_ready = clamp_ready(lng_ctrl_ready);
+  msg->lat_ctrl_ready = clamp_ready(lat_ctrl_ready);
   msg->lng_ctrl_type_active = 0u;  // [VERIFY] active control type mapping
   msg->lat_ctrl_type_active = 0u;
-  msg->gear_sel_ready = 1u;
+  msg->gear_sel_ready = clamp_ready(gear_sel_ready);
   msg->stop_hold_ready = 0u;
   msg->actuator_fault_sta = actuator_fault ? 1u : 0u;
   msg->lng_op_mode = lng_op_mode;

@@ -108,7 +108,10 @@ void ActorROS2Handler::PublishHmcFeedback()
       TargetSwaEchoDeg,
       0x01,                    // lng_op_mode [VERIFY]
       0x01,                    // lat_op_mode [VERIFY]
-      bActuatorFault);
+      bActuatorFault,
+      1u,                      // lng_ctrl_ready default (env var overrides in ROS2)
+      1u,                      // lat_ctrl_ready default
+      1u);                     // gear_sel_ready default
 }
 
 void ActorROS2Handler::operator()(carla::ros2::AckermannControl &Source)

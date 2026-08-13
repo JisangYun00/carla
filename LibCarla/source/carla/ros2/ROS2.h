@@ -113,7 +113,10 @@ class ROS2
         float target_swa_echo_deg,
         uint8_t lng_op_mode,
         uint8_t lat_op_mode,
-        bool actuator_fault);
+        bool actuator_fault,
+        uint8_t lng_ctrl_ready,
+        uint8_t lat_ctrl_ready,
+        uint8_t gear_sel_ready);
 
     // Publish vehicle control-unit status (speed, gear, brake, SWA).
     void PublishHmcVehicleStatus(

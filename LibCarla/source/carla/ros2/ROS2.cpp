@@ -44,9 +44,22 @@
 #include "subscribers/HmcCommandSubscriber.h"
 
 #include <vector>
+#include <cstdlib>
+#include <cstring>
 
 namespace carla {
 namespace ros2 {
+
+namespace {
+  uint8_t GetEnvReady(const char* name) {
+    const char* value = std::getenv(name);
+    if (value) {
+      if (std::strcmp(value, "0") == 0) return 0u;
+      if (std::strcmp(value, "1") == 0) return 1u;
+    }
+    return 1u;
+  }
+}
 
 // static fields
 std::shared_ptr<ROS2> ROS2::_instance;
@@ -151,7 +164,21 @@ void ROS2::PublishHmcFeedback(
     float target_swa_echo_deg,
     uint8_t lng_op_mode,
     uint8_t lat_op_mode,
-    bool actuator_fault) {
+    bool actuator_fault,
+    uint8_t lng_ctrl_ready,
+    uint8_t lat_ctrl_ready,
+    uint8_t gear_sel_ready) {
+  static bool env_initialized = false;
+  static uint8_t env_lng_ready = 1u;
+  static uint8_t env_lat_ready = 1u;
+  static uint8_t env_gear_ready = 1u;
+  if (!env_initialized) {
+    env_lng_ready = GetEnvReady("CARLA_HMC_LNG_CTRL_READY");
+    env_lat_ready = GetEnvReady("CARLA_HMC_LAT_CTRL_READY");
+    env_gear_ready = GetEnvReady("CARLA_HMC_GEAR_SEL_READY");
+    env_initialized = true;
+  }
+
   std::lock_guard<std::recursive_mutex> lock(_mutex);
   if (!_enabled || _actor_callbacks.find(actor) == _actor_callbacks.end()) {
     return;
@@ -170,7 +197,10 @@ void ROS2::PublishHmcFeedback(
       target_swa_echo_deg,
       lng_op_mode,
       lat_op_mode,
-      actuator_fault);
+      actuator_fault,
+      env_lng_ready,
+      env_lat_ready,
+      env_gear_ready);
   _hmc_feedback_publisher->Publish();
 }
 
