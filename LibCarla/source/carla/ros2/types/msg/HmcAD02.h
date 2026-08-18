@@ -1,6 +1,6 @@
-// Copyright (c) 2025 Computer Vision Center (CVC) at the Universitat Autonoma de Barcelona (UAB).
-// This work is licensed under the terms of the MIT license.
-// For a copy, see <https://opensource.org/licenses/MIT>.
+// Copyright (c) 2026 Hanyang University
+// Developed by Automotive Intelligence Lab
+// SPDX-License-Identifier: MIT
 
 // HMC AD-02 emergency / fail-safe control command.
 // Field order/count matches hmc_interfaces/msg/AD02.msg.

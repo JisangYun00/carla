@@ -1,6 +1,6 @@
-// Copyright (c) 2025 Computer Vision Center (CVC) at the Universitat Autonoma de Barcelona (UAB).
-// This work is licensed under the terms of the MIT license.
-// For a copy, see <https://opensource.org/licenses/MIT>.
+// Copyright (c) 2026 Hanyang University
+// Developed by Automotive Intelligence Lab
+// SPDX-License-Identifier: MIT
 
 #pragma once
 
@@ -36,7 +36,8 @@ namespace ros2 {
         BaseSubscriber(vehicle, "rt/hmc/ad", frame_id),
         _ad01_impl(std::make_shared<SubscriberImpl<AD01MsgTraits>>()),
         _ad02_impl(std::make_shared<SubscriberImpl<AD02MsgTraits>>()),
-        _last_command_time(std::chrono::steady_clock::now()) {
+        _last_ad01_time(std::chrono::steady_clock::now()),
+        _last_ad02_time(std::chrono::steady_clock::now()) {
           if (!_ad01_impl->Init("rt/hmc/ad/ad01")) {
             log_warning("HmcCommandSubscriber: Init failed for topic: rt/hmc/ad/ad01");
           }
@@ -52,9 +53,6 @@ namespace ros2 {
       // control (full brake, zero throttle/steer).
       ROS2CallbackData GetMessage() override;
 
-      // Returns true if a command has been received within the freshness window.
-      bool HasFreshCommand() const;
-
       void ProcessMessages(ActorCallback callback) override;
 
     private:
@@ -65,7 +63,9 @@ namespace ros2 {
       msg::HmcAD01 _latest_ad01;
       msg::HmcAD02 _latest_ad02;
 
-      std::chrono::steady_clock::time_point _last_command_time;
+      std::chrono::steady_clock::time_point _last_ad01_time;
+      std::chrono::steady_clock::time_point _last_ad02_time;
+      bool _ad01_received{false};
       static constexpr auto kCommandTimeout = std::chrono::milliseconds(30);
   };
 

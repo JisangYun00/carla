@@ -1,11 +1,12 @@
-// Copyright (c) 2025 Computer Vision Center (CVC) at the Universitat Autonoma de Barcelona (UAB).
-// This work is licensed under the terms of the MIT license.
-// For a copy, see <https://opensource.org/licenses/MIT>.
+// Copyright (c) 2026 Hanyang University
+// Developed by Automotive Intelligence Lab
+// SPDX-License-Identifier: MIT
 
 #include "HmcCommandSubscriber.h"
 
 #include <chrono>
 
+#include "HmcCommandArbitration.h"
 #include "carla/ros2/ROS2CallbackData.h"
 
 namespace carla {
@@ -33,8 +34,13 @@ namespace ros2 {
     const bool ad01_new = _ad01_impl->HasNewMessage();
     const bool ad02_new = _ad02_impl->HasNewMessage();
 
-    if (ad01_new || ad02_new) {
-      _last_command_time = std::chrono::steady_clock::now();
+    const auto now = std::chrono::steady_clock::now();
+    if (ad01_new) {
+      _last_ad01_time = now;
+      _ad01_received = true;
+    }
+    if (ad02_new) {
+      _last_ad02_time = now;
     }
 
     auto ad01 = ad01_new ? _ad01_impl->GetMessage() : _latest_ad01;
@@ -45,9 +51,15 @@ namespace ros2 {
     if (ad02_new) _latest_ad02 = ad02;
 
     VehicleControl control{};
+    const auto source = SelectHmcCommand(
+        _ad01_received && now - _last_ad01_time < kCommandTimeout,
+        ad02.emgc_brk_active != 0u,
+        ad02.emgc_steer_active != 0u,
+        now - _last_ad02_time,
+        kCommandTimeout);
 
     // Command timeout: fail-safe brake if no fresh AD-01/AD-02.
-    if (!HasFreshCommand()) {
+    if (source == HmcCommandSource::Timeout) {
       control.brake = 1.0f;
       control.throttle = 0.0f;
       control.steer = 0.0f;
@@ -63,13 +75,15 @@ namespace ros2 {
       control.brake = pct_to_throttle(ad01.target_bps_pct);
     }
 
-    // Emergency override (AD-02) takes precedence only when a fresh AD-02 arrives.
-    if (ad02_new && ad02.emgc_brk_active) {
-      control.brake = 1.0f;
-      control.throttle = 0.0f;
-    }
-    if (ad02_new && ad02.emgc_steer_active) {
-      control.steer = deg_to_steer_ratio(ad02.emgc_steer_ang_tgt_deg);
+    // A fresh active AD-02 remains authoritative between its 10 ms samples.
+    if (source == HmcCommandSource::AD02) {
+      if (ad02.emgc_brk_active) {
+        control.brake = 1.0f;
+        control.throttle = 0.0f;
+      }
+      if (ad02.emgc_steer_active) {
+        control.steer = deg_to_steer_ratio(ad02.emgc_steer_ang_tgt_deg);
+      }
     }
 
     // Map HMC gear enum to CARLA VehicleControl fields.
@@ -107,10 +121,6 @@ namespace ros2 {
     }
 
     return control;
-  }
-
-  bool HmcCommandSubscriber::HasFreshCommand() const {
-    return std::chrono::steady_clock::now() - _last_command_time < kCommandTimeout;
   }
 
   void HmcCommandSubscriber::ProcessMessages(ActorCallback callback) {
