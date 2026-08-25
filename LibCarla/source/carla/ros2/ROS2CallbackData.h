@@ -30,6 +30,9 @@ namespace ros2 {
     bool    reverse;
     int32_t gear;
     bool    manual_gear_shift;
+    // HMC commands carry physical steering-wheel degrees; native CARLA
+    // commands keep normalized steer in [-1, 1].
+    bool    steer_is_steering_wheel_angle {false};
   };
 
   struct AckermannControl

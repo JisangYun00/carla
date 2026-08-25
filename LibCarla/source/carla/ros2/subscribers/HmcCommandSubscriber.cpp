@@ -15,13 +15,10 @@ namespace ros2 {
   // Conversion helpers from HMC raw/physical units to CARLA VehicleControl.
   // [VERIFY] scale factors match vehicle-specific APS/BPS calibration.
   namespace {
-    constexpr float kMaxSteerAngleDeg = 540.0f;
     constexpr float kRawToPhysical = 0.1f;
 
-    inline float deg_to_steer_ratio(int16_t raw_deg) {
-      // AD-01 SWA has a 0.1 deg factor; CARLA steer is full-lock [-1, 1].
-      const float ratio = raw_deg * kRawToPhysical / kMaxSteerAngleDeg;
-      return std::min(1.0f, std::max(-1.0f, ratio));
+    inline float raw_to_swa_deg(int16_t raw_deg) {
+      return raw_deg * kRawToPhysical;
     }
 
     inline float pct_to_throttle(uint16_t raw_pct) {
@@ -66,9 +63,11 @@ namespace ros2 {
       return control;
     }
 
-    // Normal command (AD-01)
+    // Normal command (AD-01). Preserve physical SWA until the Unreal actor
+    // can map it through the vehicle's road-wheel limit and steering ratio.
+    control.steer_is_steering_wheel_angle = true;
     if (ad01.lat_ctrl_engage_req) {
-      control.steer = deg_to_steer_ratio(ad01.target_swa_deg);
+      control.steer = raw_to_swa_deg(ad01.target_swa_deg);
     }
     if (ad01.lng_ctrl_engage_req) {
       control.throttle = pct_to_throttle(ad01.target_aps_pct);
@@ -82,7 +81,7 @@ namespace ros2 {
         control.throttle = 0.0f;
       }
       if (ad02.emgc_steer_active) {
-        control.steer = deg_to_steer_ratio(ad02.emgc_steer_ang_tgt_deg);
+        control.steer = raw_to_swa_deg(ad02.emgc_steer_ang_tgt_deg);
       }
     }
 

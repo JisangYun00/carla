@@ -231,10 +231,21 @@ void ActorROS2Handler::operator()(carla::ros2::VehicleControl &Source)
   ACarlaWheeledVehicle *Vehicle = Cast<ACarlaWheeledVehicle>(_Actor);
   if (!Vehicle) return;
 
+  float NormalizedSteer = Source.steer;
+  if (Source.steer_is_steering_wheel_angle) {
+    const float SteeringRatio = GetSteeringRatioCalibration();
+    const float MaxRoadWheelDeg = Vehicle->GetMaximumSteerAngle();
+    const float MaxSwaDeg = SteeringRatio * MaxRoadWheelDeg;
+    NormalizedSteer =
+        FMath::IsFinite(MaxSwaDeg) && MaxSwaDeg > 0.0f
+            ? FMath::Clamp(Source.steer / MaxSwaDeg, -1.0f, 1.0f)
+            : 0.0f;
+  }
+
   // setup control values
   FVehicleControl NewControl;
   NewControl.Throttle = Source.throttle;
-  NewControl.Steer = Source.steer;
+  NewControl.Steer = NormalizedSteer;
   NewControl.Brake = Source.brake;
   NewControl.bHandBrake = Source.hand_brake;
   NewControl.bReverse = Source.reverse;
@@ -244,7 +255,7 @@ void ActorROS2Handler::operator()(carla::ros2::VehicleControl &Source)
   Vehicle->ApplyVehicleControl(NewControl, EVehicleInputPriority::User);
 
   // Remember the commanded values for FB-01 target echo.
-  _last_target_steer_ratio = Source.steer;
+  _last_target_steer_ratio = NormalizedSteer;
   _last_stop_hold = Source.hand_brake;
   _last_target_gear = static_cast<uint8_t>(
       Source.reverse ? 0x02 :
