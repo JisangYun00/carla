@@ -221,6 +221,9 @@ void FCarlaEngine::NotifyInitGame(const UCarlaSettings &Settings)
 
   // create ROS2 manager
   #if defined(WITH_ROS2)
+  UE_LOG(LogCarla, Log, TEXT("ROS2 runtime: enabled=%s rmw=%s domain=%d"),
+      Settings.ROS2 ? TEXT("true") : TEXT("false"),
+      *Settings.ROS2MiddlewareName, Settings.ROS2DomainId);
   if (Settings.ROS2)
   {
     auto ROS2 = carla::ros2::ROS2::GetInstance();
