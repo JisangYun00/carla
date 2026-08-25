@@ -598,6 +598,7 @@ TEST(cdr_topic_info, type_names_are_non_empty) {
   EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::CameraInfo>::type_name());
   EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaCollisionEvent>::type_name());
   EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaEgoVehicleControl>::type_name());
+  EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaEgoVehiclePhysicalStatus>::type_name());
   EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaLineInvasion>::type_name());
   EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::AckermannDriveStamped>::type_name());
   EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::TransformStamped>::type_name());
@@ -615,6 +616,7 @@ TEST(cdr_topic_info, max_sizes_are_positive) {
   EXPECT_GT(carla::ros2::CdrTopicInfo<carla::ros2::msg::NavSatFix>::max_serialized_size(), 0u);
   EXPECT_GT(carla::ros2::CdrTopicInfo<carla::ros2::msg::CameraInfo>::max_serialized_size(), 0u);
   EXPECT_GT(carla::ros2::CdrTopicInfo<carla::ros2::msg::AckermannDriveStamped>::max_serialized_size(), 0u);
+  EXPECT_GT(carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaEgoVehiclePhysicalStatus>::max_serialized_size(), 0u);
 }
 
 // ==========================================================================
@@ -865,6 +867,59 @@ TEST(cdr_serialization, carla_ego_vehicle_control_round_trip) {
   EXPECT_EQ(recovered.reverse, true);
   EXPECT_EQ(recovered.gear, 2);
   EXPECT_EQ(recovered.manual_gear_shift, false);
+}
+
+TEST(cdr_serialization, carla_ego_vehicle_physical_status_round_trip) {
+  carla::ros2::msg::CarlaEgoVehiclePhysicalStatus original{};
+  original.header.stamp.sec = 42;
+  original.header.stamp.nanosec = 123456789u;
+  original.header.frame_id = "hero";
+  original.brake_status = true;
+  original.abs_status = false;
+  original.tcs_status = true;
+  original.esc_status = false;
+  original.current_gear = 5u;
+  original.yaw_rate_radps = 0.125f;
+  original.lateral_acceleration_mps2 = -1.5f;
+  original.longitudinal_acceleration_mps2 = 2.25f;
+  original.steering_wheel_angle_deg = 12.5f;
+  original.vehicle_width_m = 1.95f;
+  original.vehicle_length_m = 4.65f;
+  original.vehicle_speed_kmh = 55.0f;
+  original.ignition_status = true;
+  original.valid_signals = 0x0000000000001FF7ull;
+
+  auto buf = carla::ros2::serialize_to_cdr(original);
+  ASSERT_FALSE(buf.empty());
+  EXPECT_EQ(buf.size(), 68u);
+
+  carla::ros2::msg::CarlaEgoVehiclePhysicalStatus recovered{};
+  EXPECT_TRUE(carla::ros2::deserialize_from_cdr(buf.data(), buf.size(), recovered));
+  EXPECT_EQ(recovered.header.stamp.sec, 42);
+  EXPECT_EQ(recovered.header.stamp.nanosec, 123456789u);
+  EXPECT_EQ(recovered.header.frame_id, "hero");
+  EXPECT_EQ(recovered.brake_status, true);
+  EXPECT_EQ(recovered.abs_status, false);
+  EXPECT_EQ(recovered.tcs_status, true);
+  EXPECT_EQ(recovered.esc_status, false);
+  EXPECT_EQ(recovered.current_gear, 5u);
+  EXPECT_FLOAT_EQ(recovered.yaw_rate_radps, 0.125f);
+  EXPECT_FLOAT_EQ(recovered.lateral_acceleration_mps2, -1.5f);
+  EXPECT_FLOAT_EQ(recovered.longitudinal_acceleration_mps2, 2.25f);
+  EXPECT_FLOAT_EQ(recovered.steering_wheel_angle_deg, 12.5f);
+  EXPECT_FLOAT_EQ(recovered.vehicle_width_m, 1.95f);
+  EXPECT_FLOAT_EQ(recovered.vehicle_length_m, 4.65f);
+  EXPECT_FLOAT_EQ(recovered.vehicle_speed_kmh, 55.0f);
+  EXPECT_EQ(recovered.ignition_status, true);
+  EXPECT_EQ(recovered.valid_signals, 0x0000000000001FF7ull);
+
+  EXPECT_EQ(carla::ros2::cdr_serialized_size(original), static_cast<uint32_t>(buf.size()));
+  EXPECT_STREQ(
+      carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaEgoVehiclePhysicalStatus>::type_hash(),
+      "RIHS01_855c6a5a002e659af2a3ef2346011e0a943b9c79a463ebd1734d000b4298ab1f");
+  EXPECT_GT(
+      carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaEgoVehiclePhysicalStatus>::max_serialized_size(),
+      static_cast<size_t>(buf.size()));
 }
 
 TEST(cdr_serialization, carla_line_invasion_round_trip) {
@@ -1194,6 +1249,9 @@ TEST(generic_cdr_pubsubtype, type_name_matches_cdr_topic_info) {
   EXPECT_STREQ(
       CdrTopicInfo<msg::CarlaEgoVehicleControl>::type_name(),
       GenericCdrPubSubType<msg::CarlaEgoVehicleControl>().getName());
+  EXPECT_STREQ(
+      CdrTopicInfo<msg::CarlaEgoVehiclePhysicalStatus>::type_name(),
+      GenericCdrPubSubType<msg::CarlaEgoVehiclePhysicalStatus>().getName());
 }
 
 TEST(generic_cdr_pubsubtype, m_typesize_is_positive) {

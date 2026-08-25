@@ -17,6 +17,7 @@
 #include "carla/ros2/types/msg/CameraInfo.h"
 #include "carla/ros2/types/msg/CarlaCollisionEvent.h"
 #include "carla/ros2/types/msg/CarlaEgoVehicleControl.h"
+#include "carla/ros2/types/msg/CarlaEgoVehiclePhysicalStatus.h"
 #include "carla/ros2/types/msg/CarlaLineInvasion.h"
 #include "carla/ros2/types/msg/Clock.h"
 #include "carla/ros2/types/msg/Float32.h"
@@ -480,6 +481,48 @@ inline void deserialize_cdr(
   cdr >> m.reverse;
   cdr >> m.gear;
   cdr >> m.manual_gear_shift;
+}
+
+// --
+
+/// CarlaEgoVehiclePhysicalStatus: fixed-size chassis/geometry snapshot.
+/// Field order must match the .msg definition exactly.
+inline void serialize_cdr(
+    eprosima::fastcdr::Cdr& cdr, const msg::CarlaEgoVehiclePhysicalStatus& m) {
+  serialize_cdr(cdr, m.header);
+  cdr << m.brake_status;
+  cdr << m.abs_status;
+  cdr << m.tcs_status;
+  cdr << m.esc_status;
+  cdr << m.current_gear;
+  cdr << m.yaw_rate_radps;
+  cdr << m.lateral_acceleration_mps2;
+  cdr << m.longitudinal_acceleration_mps2;
+  cdr << m.steering_wheel_angle_deg;
+  cdr << m.vehicle_width_m;
+  cdr << m.vehicle_length_m;
+  cdr << m.vehicle_speed_kmh;
+  cdr << m.ignition_status;
+  cdr << m.valid_signals;
+}
+
+inline void deserialize_cdr(
+    eprosima::fastcdr::Cdr& cdr, msg::CarlaEgoVehiclePhysicalStatus& m) {
+  deserialize_cdr(cdr, m.header);
+  cdr >> m.brake_status;
+  cdr >> m.abs_status;
+  cdr >> m.tcs_status;
+  cdr >> m.esc_status;
+  cdr >> m.current_gear;
+  cdr >> m.yaw_rate_radps;
+  cdr >> m.lateral_acceleration_mps2;
+  cdr >> m.longitudinal_acceleration_mps2;
+  cdr >> m.steering_wheel_angle_deg;
+  cdr >> m.vehicle_width_m;
+  cdr >> m.vehicle_length_m;
+  cdr >> m.vehicle_speed_kmh;
+  cdr >> m.ignition_status;
+  cdr >> m.valid_signals;
 }
 
 // --

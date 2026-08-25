@@ -11,6 +11,7 @@
 #include "carla/ros2/types/msg/CameraInfo.h"
 #include "carla/ros2/types/msg/CarlaCollisionEvent.h"
 #include "carla/ros2/types/msg/CarlaEgoVehicleControl.h"
+#include "carla/ros2/types/msg/CarlaEgoVehiclePhysicalStatus.h"
 #include "carla/ros2/types/msg/CarlaLineInvasion.h"
 #include "carla/ros2/types/msg/Clock.h"
 #include "carla/ros2/types/msg/Float32.h"
@@ -131,6 +132,16 @@ template<> struct CdrTopicInfo<msg::CarlaEgoVehicleControl> {
     return "RIHS01_4f251fa2a554e8ed996f77eb1d5b65515af1369eceb04d5122cb5761f7801be3";
   }
   static size_t max_serialized_size() { return 289u; }
+};
+
+template<> struct CdrTopicInfo<msg::CarlaEgoVehiclePhysicalStatus> {
+  static const char* type_name() {
+    return "carla_msgs::msg::dds_::CarlaEgoVehiclePhysicalStatus_";
+  }
+  static const char* type_hash() {
+    return "RIHS01_855c6a5a002e659af2a3ef2346011e0a943b9c79a463ebd1734d000b4298ab1f";
+  }
+  static size_t max_serialized_size() { return 320u; }
 };
 
 template<> struct CdrTopicInfo<msg::CarlaLineInvasion> {
