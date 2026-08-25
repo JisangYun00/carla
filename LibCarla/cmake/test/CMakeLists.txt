@@ -29,6 +29,9 @@ file(GLOB libcarla_test_sources
 if (NOT LIBCARLA_WITH_ROS2)
   list(REMOVE_ITEM libcarla_test_sources
       "${libcarla_source_path}/test/server/test_ros2_middleware.cpp")
+else()
+  list(APPEND libcarla_test_sources
+      "${libcarla_source_path}/carla/ros2/publishers/CarlaEgoVehiclePhysicalStatusPublisher.cpp")
 endif()
 
 file(GLOB libcarla_test_client_sources "")
