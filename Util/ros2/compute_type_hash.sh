@@ -2,6 +2,9 @@
 # Copyright (c) 2026 Computer Vision Center (CVC) at the Universitat Autonoma de Barcelona (UAB).
 # This work is licensed under the terms of the MIT license.
 # For a copy, see <https://opensource.org/licenses/MIT>.
+#
+# Revision History:
+#   2026-08-25: Jisang Yun - Made the Docker hash workflow self-contained.
 
 # Compute the REP-2011 RIHS01 type hash for a ROS 2 message type by building
 # the .msg file inside an osrf/ros:jazzy-desktop Docker container.
@@ -157,16 +160,18 @@ PYEOF
 echo "[hash] Building ${ROS_TYPE} inside osrf/ros:jazzy-desktop ..." >&2
 
 docker run --rm \
+    --user="$(id -u):$(id -g)" \
+    --env=HOME=/tmp \
     --volume="${WS}:/ws" \
     osrf/ros:jazzy-desktop \
     bash -c "
-        set -euo pipefail
+        set -eo pipefail
         source /opt/ros/jazzy/setup.bash
+        set -u
         cd /ws
-        colcon build \
+        colcon --log-base /tmp/colcon-log build \
             --packages-select ${PKG_NAME} \
             --cmake-args -DCMAKE_BUILD_TYPE=Release \
-            --log-base /tmp/colcon-log \
             > /tmp/colcon-out.txt 2>&1 \
         || { echo 'ERROR: colcon build failed:' >&2; cat /tmp/colcon-out.txt >&2; exit 1; }
         JSON_FILE=/ws/install/${PKG_NAME}/share/${PKG_NAME}/msg/${TYPE_NAME}.json
@@ -174,8 +179,16 @@ docker run --rm \
             echo 'ERROR: generated JSON not found: '\"\$JSON_FILE\" >&2
             exit 1
         fi
-        jq -re --arg t '${ROS_TYPE}' \
-            '.type_hashes[] | select(.type_name == \$t) | .hash_string' \
-            \"\$JSON_FILE\" \
+        python3 -c '
+import json, sys
+with open(sys.argv[1]) as stream:
+    data = json.load(stream)
+for item in data.get(\"type_hashes\", []):
+    if item.get(\"type_name\") == sys.argv[2]:
+        print(item[\"hash_string\"])
+        break
+else:
+    raise SystemExit(1)
+' \"\$JSON_FILE\" '${ROS_TYPE}' \
         || { echo \"ERROR: '${ROS_TYPE}' not found in \$JSON_FILE\" >&2; exit 1; }
     "
