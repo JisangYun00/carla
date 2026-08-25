@@ -5,7 +5,7 @@ find_package(ros_environment REQUIRED)
 
 set(ROS_VERSION $ENV{ROS_VERSION})
 
-set(SERVICE_FILES SpawnObject.srv DestroyObject.srv GetBlueprints.srv)
+set(SERVICE_FILES SpawnObject.srv DestroyObject.srv GetBlueprints.srv RespawnVehicle.srv)
 
 set(MSG_FILES
     CarlaBoundingBox.msg

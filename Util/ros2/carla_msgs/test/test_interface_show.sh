@@ -72,4 +72,22 @@ done
 echo "==> ros2 interface list | grep CarlaEgoVehiclePhysicalStatus"
 ros2 interface list | grep CarlaEgoVehiclePhysicalStatus
 
+echo "==> Verifying RespawnVehicle service"
+RESPAWN_OUTPUT="$(ros2 interface show carla_msgs/srv/RespawnVehicle)"
+for field in \
+  "uint8 location_mode" \
+  "float64 latitude" \
+  "float64 longitude" \
+  "float64 heading_deg" \
+  "bool success" \
+  "string message" \
+  "uint32 hero_id" \
+  "uint32 gnss_id" \
+  "uint32 imu_id"; do
+  if ! grep -qF "${field}" <<<"${RESPAWN_OUTPUT}"; then
+    echo "ERROR: expected RespawnVehicle field missing: ${field}"
+    exit 1
+  fi
+done
+
 echo "==> PASS"

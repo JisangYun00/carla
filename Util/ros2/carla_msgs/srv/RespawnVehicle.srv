@@ -1,0 +1,20 @@
+# Copyright (c) 2026 Hanyang University.
+# Developed by Automotive Intelligence Lab.
+# SPDX-License-Identifier: MIT
+#
+# Author: Jisang Yun <jisangyun@hanyang.ac.kr>
+#
+# CARLA hero respawn request owned by the Sensor/Status Provider runtime.
+
+uint8 INITIAL=0
+uint8 ROUTE_WAYPOINT=1
+uint8 location_mode
+float64 latitude
+float64 longitude
+float64 heading_deg
+---
+bool success
+string message
+uint32 hero_id
+uint32 gnss_id
+uint32 imu_id
