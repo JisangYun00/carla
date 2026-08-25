@@ -182,8 +182,8 @@ void ActorROS2Handler::PublishEgoVehiclePhysicalStatus()
   // ---------------------------------------------------------------------------
   const float SteeringRatio = GetSteeringRatioCalibration();
   if (SteeringRatio > 0.0f && FMath::IsFinite(SteeringRatio)) {
-    const float FlSteer = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FrontLeft);
-    const float FrSteer = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FrontRight);
+    const float FlSteer = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FL_Wheel);
+    const float FrSteer = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FR_Wheel);
     float RoadWheelAngleDeg = 0.0f;
     bool HaveValidWheelAngle = false;
     if (FMath::IsFinite(FlSteer) && FMath::IsFinite(FrSteer)) {
@@ -276,8 +276,8 @@ void ActorROS2Handler::PublishHmcFeedback()
   bool bActualSwaValid = false;
   bool bTargetSwaEchoValid = false;
   if (bCalibrationValid) {
-    const float FlSteer = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FrontLeft);
-    const float FrSteer = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FrontRight);
+    const float FlSteer = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FL_Wheel);
+    const float FrSteer = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FR_Wheel);
     float ActualRoadWheelDeg = 0.0f;
     bool HaveActual = false;
     if (FMath::IsFinite(FlSteer) && FMath::IsFinite(FrSteer)) {
