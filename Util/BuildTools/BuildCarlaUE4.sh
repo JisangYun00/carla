@@ -100,17 +100,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Forward ROS2 runtime flags to the UE4 editor command line.
-# --ros2 is consumed above for build-time config (OptionalModules.ini);
-# the editor also needs it as a runtime flag for CarlaSettings.
+# Forward ROS2 runtime flags using the single-dash spelling consumed by
+# Unreal FParse in CarlaSettings. The double-dash forms above belong only to
+# this shell script's getopt interface.
 if ${USE_ROS2} ; then
-  EDITOR_FLAGS="${EDITOR_FLAGS} --ros2"
+  EDITOR_FLAGS="${EDITOR_FLAGS} -ros2"
 fi
 if [ -n "${RMW}" ] ; then
-  EDITOR_FLAGS="${EDITOR_FLAGS} --rmw=${RMW}"
+  EDITOR_FLAGS="${EDITOR_FLAGS} -rmw=${RMW}"
 fi
 if [ -n "${ROS_DOMAIN_ID_ARG}" ] ; then
-  EDITOR_FLAGS="${EDITOR_FLAGS} --ros-domain-id=${ROS_DOMAIN_ID_ARG}"
+  EDITOR_FLAGS="${EDITOR_FLAGS} -ros-domain-id=${ROS_DOMAIN_ID_ARG}"
 fi
 
 # ==============================================================================
