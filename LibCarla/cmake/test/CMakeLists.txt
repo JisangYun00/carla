@@ -31,7 +31,8 @@ if (NOT LIBCARLA_WITH_ROS2)
       "${libcarla_source_path}/test/server/test_ros2_middleware.cpp")
 else()
   list(APPEND libcarla_test_sources
-      "${libcarla_source_path}/carla/ros2/publishers/CarlaEgoVehiclePhysicalStatusPublisher.cpp")
+      "${libcarla_source_path}/carla/ros2/publishers/CarlaEgoVehiclePhysicalStatusPublisher.cpp"
+      "${libcarla_source_path}/carla/ros2/publishers/HmcFeedbackPublisher.cpp")
 endif()
 
 file(GLOB libcarla_test_client_sources "")

@@ -211,6 +211,11 @@ void ROS2::PublishHmcFeedback(
     _hmc_feedback_publisher = std::make_shared<HmcFeedbackPublisher>();
   }
   static uint8_t s_alive_counter = 0u;
+  // Environment knobs may only disable a ready signal; they must never
+  // override an unsafe Actor-level assertion to true.
+  const auto and_ready = [](uint8_t passed, uint8_t env) -> uint8_t {
+    return (passed == 1u && env == 1u) ? 1u : 0u;
+  };
   _hmc_feedback_publisher->Write(
       s_alive_counter++,
       aps_pct,
@@ -222,9 +227,9 @@ void ROS2::PublishHmcFeedback(
       lng_op_mode,
       lat_op_mode,
       actuator_fault,
-      env_lng_ready,
-      env_lat_ready,
-      env_gear_ready);
+      and_ready(lng_ctrl_ready, env_lng_ready),
+      and_ready(lat_ctrl_ready, env_lat_ready),
+      and_ready(gear_sel_ready, env_gear_ready));
   _hmc_feedback_publisher->Publish();
 }
 

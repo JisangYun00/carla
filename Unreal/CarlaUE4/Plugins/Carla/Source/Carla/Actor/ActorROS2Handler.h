@@ -3,6 +3,23 @@
 //
 // This work is licensed under the terms of the MIT license.
 // For a copy, see <https://opensource.org/licenses/MIT>.
+//
+/**
+ * Module:      ActorROS2Handler.h
+ * Description: ROS2 visitor/callback handler for a registered CARLA actor.
+ *              Bridges AActor state to the CARLA ROS2 middleware publishers
+ *              and forwards VehicleControl/AckermannControl commands back to
+ *              the actor.
+ *
+ * Authors:
+ *   Computer Vision Center (CVC) at the Universitat Autonoma de Barcelona (UAB)
+ *   Jisang Yun (jisangyun@hanyang.ac.kr)
+ *
+ * Revision History:
+ *   2026-08-25: Jisang Yun - Replaced legacy HmcVehicleStatus/HmcVehicleConfig
+ *               publishers with single CarlaEgoVehiclePhysicalStatusPublisher;
+ *               updated FB-01 SWA to use real wheel angle + steering ratio.
+ */
 
 #pragma once
 

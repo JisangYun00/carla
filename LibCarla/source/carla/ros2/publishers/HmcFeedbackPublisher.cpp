@@ -16,14 +16,16 @@ namespace {
   constexpr float kMaxPctRaw = 1023.0f;
 
   inline uint16_t saturate_pct(float pct) {
-    const float raw = pct * kPhysicalToRaw;  // HMC factor: 0.1 percent
+    if (!std::isfinite(pct)) return 0u;
+    const float raw = std::round(pct * kPhysicalToRaw);  // HMC factor: 0.1 percent
     if (raw < 0.0f) return 0u;
     if (raw > kMaxPctRaw) return static_cast<uint16_t>(kMaxPctRaw);
     return static_cast<uint16_t>(raw);
   }
 
   inline int16_t saturate_int16(float physical) {
-    const float raw = physical * kPhysicalToRaw;  // HMC factor: 0.1
+    if (!std::isfinite(physical)) return 0;
+    const float raw = std::round(physical * kPhysicalToRaw);  // HMC factor: 0.1
     if (raw < -32768.0f) return -32768;
     if (raw > 32767.0f) return 32767;
     return static_cast<int16_t>(raw);

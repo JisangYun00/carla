@@ -23,10 +23,10 @@ namespace ros2 {
       };
 
       HmcFeedbackPublisher() :
-        BasePublisher("rt/hmc/fb"),
+        BasePublisher("rt/vehicle/fb"),
         _impl(std::make_shared<PublisherImpl<FB01MsgTraits>>()) {
-          if (!_impl->Init("rt/hmc/fb/fb01")) {
-            log_warning("HmcFeedbackPublisher: Init failed for topic: rt/hmc/fb/fb01");
+          if (!_impl->Init("rt/vehicle/fb01")) {
+            log_warning("HmcFeedbackPublisher: Init failed for topic: rt/vehicle/fb01");
           }
       }
 
@@ -49,6 +49,12 @@ namespace ros2 {
           uint8_t lng_ctrl_ready,
           uint8_t lat_ctrl_ready,
           uint8_t gear_sel_ready);
+
+#ifdef LIBCARLA_WITH_GTEST
+      const msg::HmcFB01* GetMessageForTesting() const {
+        return _impl->GetMessage();
+      }
+#endif
 
     private:
       std::shared_ptr<PublisherImpl<FB01MsgTraits>> _impl;

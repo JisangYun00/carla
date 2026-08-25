@@ -33,6 +33,15 @@ float GetSteeringRatioCalibration() {
   return ratio;
 }
 
+// Convert normalized CARLA steer command [-1, 1] to physical road-wheel
+// angle using the vehicle's maximum road-wheel angle. Result is degrees.
+float NormalizedSteerToRoadWheelDeg(const ACarlaWheeledVehicle* Vehicle, float normalized_steer) {
+  if (!Vehicle) return 0.0f;
+  const float MaxRoadWheelDeg = Vehicle->GetMaximumSteerAngle();
+  if (!FMath::IsFinite(MaxRoadWheelDeg)) return 0.0f;
+  return normalized_steer * MaxRoadWheelDeg;
+}
+
 } // namespace
 
 void ActorROS2Handler::PublishEgoVehiclePhysicalStatus()
@@ -252,13 +261,64 @@ void ActorROS2Handler::PublishHmcFeedback()
   if (!ROS2 || !ROS2->IsEnabled()) return;
 
   const FVehicleControl &Control = Vehicle->GetVehicleControl();
+
+  // FB-01 actual speed: forward speed in cm/s -> km/h. This is the signed
+  // forward component, matching the legacy HMC feedback convention.
   const float SpeedKmh = Vehicle->GetVehicleForwardSpeed() * 0.036f;
-  const float ActualSwaDeg = Control.Steer * 540.0f;  // [VERIFY] max steer angle
-  const float TargetSwaEchoDeg = _last_target_steer_ratio * 540.0f;
+
+  // Steering calibration governs whether SWA feedback is meaningful.
+  const float SteeringRatio = GetSteeringRatioCalibration();
+  const bool bCalibrationValid =
+      SteeringRatio > 0.0f && FMath::IsFinite(SteeringRatio);
+
+  float ActualSwaDeg = 0.0f;
+  float TargetSwaEchoDeg = 0.0f;
+  bool bActualSwaValid = false;
+  bool bTargetSwaEchoValid = false;
+  if (bCalibrationValid) {
+    const float FlSteer = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FrontLeft);
+    const float FrSteer = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FrontRight);
+    float ActualRoadWheelDeg = 0.0f;
+    bool HaveActual = false;
+    if (FMath::IsFinite(FlSteer) && FMath::IsFinite(FrSteer)) {
+      ActualRoadWheelDeg = (FlSteer + FrSteer) * 0.5f;
+      HaveActual = true;
+    } else if (FMath::IsFinite(FlSteer)) {
+      ActualRoadWheelDeg = FlSteer;
+      HaveActual = true;
+    }
+    if (HaveActual) {
+      const float SwaDeg = ActualRoadWheelDeg * SteeringRatio;
+      if (FMath::IsFinite(SwaDeg)) {
+        ActualSwaDeg = SwaDeg;
+        bActualSwaValid = true;
+      }
+    }
+
+    const float TargetRoadWheelDeg =
+        NormalizedSteerToRoadWheelDeg(Vehicle, _last_target_steer_ratio);
+    const float EchoDeg = TargetRoadWheelDeg * SteeringRatio;
+    if (FMath::IsFinite(EchoDeg)) {
+      TargetSwaEchoDeg = EchoDeg;
+      bTargetSwaEchoValid = true;
+    }
+  }
+
+  const bool bSpeedFinite = FMath::IsFinite(SpeedKmh);
+  const bool bThrottleBrakeFinite =
+      FMath::IsFinite(Control.Throttle) && FMath::IsFinite(Control.Brake);
   const bool bActuatorFault =
-      !FMath::IsFinite(Control.Throttle) ||
-      !FMath::IsFinite(Control.Steer) ||
-      !FMath::IsFinite(Control.Brake);
+      !bSpeedFinite ||
+      !bThrottleBrakeFinite ||
+      !bActualSwaValid ||
+      !bTargetSwaEchoValid ||
+      !bCalibrationValid;
+  const uint8_t lng_ready = bCalibrationValid ? 1u : 0u;
+  const uint8_t lat_ready = (bCalibrationValid && bActualSwaValid && bTargetSwaEchoValid) ? 1u : 0u;
+  const uint8_t gear_ready = 1u;  // gear mapping is always well-defined
+
+  (void)Control.Steer;  // No longer used for SWA; avoid unused warning.
+
   ROS2->PublishHmcFeedback(
       _Actor,
       Control.Throttle * 100.0f,
@@ -270,9 +330,9 @@ void ActorROS2Handler::PublishHmcFeedback()
       0x01,                    // lng_op_mode [VERIFY]
       0x01,                    // lat_op_mode [VERIFY]
       bActuatorFault,
-      1u,                      // lng_ctrl_ready default (env var overrides in ROS2)
-      1u,                      // lat_ctrl_ready default
-      1u);                     // gear_sel_ready default
+      lng_ready,
+      lat_ready,
+      gear_ready);
 }
 
 void ActorROS2Handler::operator()(carla::ros2::AckermannControl &Source)

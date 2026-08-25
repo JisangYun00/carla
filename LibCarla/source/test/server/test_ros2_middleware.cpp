@@ -16,6 +16,7 @@
 #include <carla/ros2/middleware/ISubscriberMiddleware.h>
 #include <carla/ros2/publishers/CarlaEgoVehiclePhysicalStatusPublisher.h>
 #include <carla/ros2/publishers/CarlaIMUPublisher.h>
+#include <carla/ros2/publishers/HmcFeedbackPublisher.h>
 #include <carla/ros2/publishers/PublisherImpl.h>
 #include <carla/ros2/subscribers/SubscriberImpl.h>
 #include <carla/ros2/middleware/fastdds/GenericCdrPubSubType.h>
@@ -26,6 +27,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdlib>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -1539,7 +1541,100 @@ TEST(carla_ego_vehicle_physical_status_publisher, cdr_round_trip_after_write) {
 }
 
 // ==========================================================================
-// Group 14: domain_id_resolution (15 tests)
+// Group 14: hmc_feedback_publisher_saturation (3 tests)
+// Tests the physical->raw conversion helpers in HmcFeedbackPublisher for
+// boundary saturation, NaN/Inf handling, and rounding behavior.
+// ==========================================================================
+
+TEST(hmc_feedback_publisher_saturation, pct_boundary_and_nan) {
+  HmcFeedbackPublisher publisher;
+
+  EXPECT_TRUE(publisher.Write(
+      0u,
+      0.0f, 0.0f,
+      0.0f, 0.0f,
+      0.0f, 0.0f,
+      0u, 0u,
+      false,
+      1u, 1u, 1u));
+  const auto* msg = publisher.GetMessageForTesting();
+  ASSERT_NE(msg, nullptr);
+  EXPECT_EQ(msg->aps_fdb_pct, 0u);
+  EXPECT_EQ(msg->bps_fdb_pct, 0u);
+
+  EXPECT_TRUE(publisher.Write(
+      1u,
+      150.0f, std::numeric_limits<float>::quiet_NaN(),
+      0.0f, 0.0f,
+      0.0f, 0.0f,
+      0u, 0u,
+      false,
+      1u, 1u, 1u));
+  const auto* msg2 = publisher.GetMessageForTesting();
+  ASSERT_NE(msg2, nullptr);
+  EXPECT_EQ(msg2->aps_fdb_pct, 1023u)
+      << "150% must saturate to max raw 1023";
+  EXPECT_EQ(msg2->bps_fdb_pct, 0u)
+      << "NaN BPS must map to raw 0";
+}
+
+TEST(hmc_feedback_publisher_saturation, int16_boundary_and_infinite) {
+  HmcFeedbackPublisher publisher;
+
+  EXPECT_TRUE(publisher.Write(
+      0u,
+      0.0f, 0.0f,
+      5000.0f, -5000.0f,
+      4000.0f, -4000.0f,
+      0u, 0u,
+      false,
+      1u, 1u, 1u));
+  const auto* msg = publisher.GetMessageForTesting();
+  ASSERT_NE(msg, nullptr);
+  EXPECT_EQ(msg->actual_speed_kmh, 32767)
+      << "Speed above int16 max must saturate";
+  EXPECT_EQ(msg->target_speed_echo_kmh, -32768)
+      << "Speed below int16 min must saturate";
+  EXPECT_EQ(msg->actual_swa_deg, 32767)
+      << "SWA above int16 max must saturate";
+
+  EXPECT_TRUE(publisher.Write(
+      1u,
+      0.0f, 0.0f,
+      std::numeric_limits<float>::infinity(), 12.5f,
+      -12.5f, 0.0f,
+      0u, 0u,
+      false,
+      1u, 1u, 1u));
+  const auto* msg2 = publisher.GetMessageForTesting();
+  ASSERT_NE(msg2, nullptr);
+  EXPECT_EQ(msg2->actual_speed_kmh, 0)
+      << "Inf speed must map to raw 0";
+  EXPECT_EQ(msg2->actual_swa_deg, -125)
+      << "-12.5 deg rounded = -125 raw (0.1 factor)";
+}
+
+TEST(hmc_feedback_publisher_saturation, rounding_matches_tenth_factor) {
+  HmcFeedbackPublisher publisher;
+
+  EXPECT_TRUE(publisher.Write(
+      0u,
+      12.35f, 12.36f,
+      0.0f, 0.0f,
+      0.0f, 0.0f,
+      0u, 0u,
+      false,
+      1u, 1u, 1u));
+  const auto* msg = publisher.GetMessageForTesting();
+  ASSERT_NE(msg, nullptr);
+  EXPECT_EQ(msg->aps_fdb_pct, 124u)  // round(12.35 * 10) = 124
+      << "APS 12.35% rounds to raw 124";
+  EXPECT_EQ(msg->bps_fdb_pct, 124u)  // round(12.36 * 10) = 124
+      << "BPS 12.36% rounds to raw 124";
+}
+
+// ==========================================================================
+// Group 15: domain_id_resolution (15 tests)
 // Pure tests for TryParseDomainId and ResolveDomainId. The environment value is
 // passed as a string, so the precedence rules need no real environment.
 // ==========================================================================

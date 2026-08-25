@@ -33,16 +33,16 @@ namespace ros2 {
       };
 
       HmcCommandSubscriber(void* vehicle, std::string /*base_topic_name*/, std::string frame_id) :
-        BaseSubscriber(vehicle, "rt/hmc/ad", frame_id),
+        BaseSubscriber(vehicle, "rt/vehicle/ad", frame_id),
         _ad01_impl(std::make_shared<SubscriberImpl<AD01MsgTraits>>()),
         _ad02_impl(std::make_shared<SubscriberImpl<AD02MsgTraits>>()),
         _last_ad01_time(std::chrono::steady_clock::now()),
         _last_ad02_time(std::chrono::steady_clock::now()) {
-          if (!_ad01_impl->Init("rt/hmc/ad/ad01")) {
-            log_warning("HmcCommandSubscriber: Init failed for topic: rt/hmc/ad/ad01");
+          if (!_ad01_impl->Init("rt/vehicle/ad01")) {
+            log_warning("HmcCommandSubscriber: Init failed for topic: rt/vehicle/ad01");
           }
-          if (!_ad02_impl->Init("rt/hmc/ad/ad02")) {
-            log_warning("HmcCommandSubscriber: Init failed for topic: rt/hmc/ad/ad02");
+          if (!_ad02_impl->Init("rt/vehicle/ad02")) {
+            log_warning("HmcCommandSubscriber: Init failed for topic: rt/vehicle/ad02");
           }
         }
 

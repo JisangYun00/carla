@@ -183,16 +183,16 @@ template<> struct CdrTopicInfo<msg::Header> {
   static size_t max_serialized_size() { return 268u; }
 };
 
-// HMC interface types.  type_hash is intentionally left as nullptr because
-// the vendored CycloneDDS/FastDDS CDR passthrough does not require REP-2011
-// hashes for interop; setting USER_DATA would require computing the exact
-// RIHS01 values from hmc_interfaces/msg/*.msg.
+// HMC interface types.  The RIHS01 hashes below are pinned against the
+// canonical hmc_interfaces/msg/{AD01,AD02,FB01}.msg definitions used by the
+// ADS main repository. They are computed with Util/ros2/compute_type_hash.sh
+// and must be updated if the .msg definitions change.
 template<> struct CdrTopicInfo<msg::HmcAD01> {
   static const char* type_name() {
     return "hmc_interfaces::msg::dds_::AD01_";
   }
   static const char* type_hash() {
-    return nullptr;
+    return "RIHS01_07c642e1060e14409c10723ef46e48734d814bb7fef4f4fa9bb259ddb2b419bd";
   }
   static size_t max_serialized_size() { return 27u; }
 };
@@ -202,7 +202,7 @@ template<> struct CdrTopicInfo<msg::HmcAD02> {
     return "hmc_interfaces::msg::dds_::AD02_";
   }
   static const char* type_hash() {
-    return nullptr;
+    return "RIHS01_53718f6c90138342c6d6ae6ed63b3fe8119d39ec38897f9451ef71236434491a";
   }
   static size_t max_serialized_size() { return 16u; }
 };
@@ -212,7 +212,7 @@ template<> struct CdrTopicInfo<msg::HmcFB01> {
     return "hmc_interfaces::msg::dds_::FB01_";
   }
   static const char* type_hash() {
-    return nullptr;
+    return "RIHS01_625832ccc6c49daae90a2baa208fb8c0c8efe9813dea8b785a118e02e0380b4a";
   }
   static size_t max_serialized_size() { return 30u; }
 };
