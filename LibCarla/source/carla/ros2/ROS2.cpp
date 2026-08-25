@@ -36,8 +36,7 @@
 #include "publishers/CarlaSSCameraPublisher.h"
 #include "publishers/CarlaTransformPublisher.h"
 #include "publishers/HmcFeedbackPublisher.h"
-#include "publishers/HmcVehicleStatusPublisher.h"
-#include "publishers/HmcVehicleConfigPublisher.h"
+#include "publishers/CarlaEgoVehiclePhysicalStatusPublisher.h"
 
 #include "subscribers/AckermannControlSubscriber.h"
 #include "subscribers/CarlaEgoVehicleControlSubscriber.h"
@@ -141,7 +140,7 @@ void ROS2::SetTimestamp(double timestamp) {
   _clock_publisher->Write(_seconds, _nanoseconds);
   _clock_publisher->Publish();
 
-  // HMC: publish FB-01 and vehicle status at 10 ms independently of command arrival.
+  // HMC: publish FB-01 at 10 ms independently of command arrival.
   const auto now = std::chrono::steady_clock::now();
   if (now - _last_hmc_feedback_publish >= kHmcFeedbackPeriod) {
     if (!_hmc_feedback_publisher) {
@@ -152,6 +151,31 @@ void ROS2::SetTimestamp(double timestamp) {
     }
     _last_hmc_feedback_publish = now;
   }
+
+  // Physical status: publish at 100 ms measured against the simulation timestamp.
+  // Publish on first timestamp, after 100 ms elapsed, or on time rewind.
+  const int64_t current_timestamp_ns =
+      static_cast<int64_t>(_seconds) * 1000000000LL + static_cast<int64_t>(_nanoseconds);
+  const int64_t elapsed_ns = current_timestamp_ns - _last_ego_vehicle_physical_status_timestamp_ns;
+  const bool should_publish_physical_status =
+      (_last_ego_vehicle_physical_status_timestamp_ns < 0) ||
+      (elapsed_ns >= kEgoVehiclePhysicalStatusPeriodNs) ||
+      (elapsed_ns < kEgoVehiclePhysicalStatusRewindThresholdNs);
+  if (should_publish_physical_status) {
+    if (!_ego_vehicle_physical_status_publisher) {
+      _ego_vehicle_physical_status_publisher = std::make_shared<CarlaEgoVehiclePhysicalStatusPublisher>();
+    }
+    for (auto& pair : _ego_vehicle_physical_status_callbacks) {
+      pair.second();
+    }
+    _last_ego_vehicle_physical_status_timestamp_ns = current_timestamp_ns;
+  }
+}
+
+void ROS2::GetTimestamp(int32_t& sec, uint32_t& nsec) const {
+  std::lock_guard<std::recursive_mutex> lock(_mutex);
+  sec = _seconds;
+  nsec = _nanoseconds;
 }
 
 void ROS2::PublishHmcFeedback(
@@ -204,49 +228,51 @@ void ROS2::PublishHmcFeedback(
   _hmc_feedback_publisher->Publish();
 }
 
-void ROS2::PublishHmcVehicleStatus(
+void ROS2::PublishEgoVehiclePhysicalStatus(
     void *actor,
     const std::string& frame_id,
+    bool brake_status,
+    bool abs_status,
+    bool tcs_status,
+    bool esc_status,
     uint8_t current_gear,
-    uint8_t brake_status,
-    float vehicle_speed_kmh,
-    float actual_swa_deg,
-    uint8_t ignition_on,
-    uint64_t valid_flags) {
-  std::lock_guard<std::recursive_mutex> lock(_mutex);
-  if (!_enabled || _actor_callbacks.find(actor) == _actor_callbacks.end()) {
-    return;
-  }
-  if (!_hmc_vehicle_status_publisher) {
-    _hmc_vehicle_status_publisher = std::make_shared<HmcVehicleStatusPublisher>();
-  }
-  _hmc_vehicle_status_publisher->Write(
-      _seconds, _nanoseconds, frame_id,
-      current_gear, brake_status,
-      vehicle_speed_kmh, actual_swa_deg,
-      ignition_on, valid_flags);
-  _hmc_vehicle_status_publisher->Publish();
-}
-
-void ROS2::PublishHmcVehicleConfig(
-    void *actor,
-    const std::string& frame_id,
+    float yaw_rate_radps,
+    float lateral_acceleration_mps2,
+    float longitudinal_acceleration_mps2,
+    float steering_wheel_angle_deg,
     float vehicle_width_m,
     float vehicle_length_m,
-    uint8_t ignition_default_on) {
+    float vehicle_speed_kmh,
+    bool ignition_status,
+    uint64_t valid_signals) {
   std::lock_guard<std::recursive_mutex> lock(_mutex);
   if (!_enabled || _actor_callbacks.find(actor) == _actor_callbacks.end()) {
     return;
   }
-  if (_hmc_vehicle_config_published.count(actor) != 0u) return;
-  if (!_hmc_vehicle_config_publisher) {
-    _hmc_vehicle_config_publisher = std::make_shared<HmcVehicleConfigPublisher>();
+  if (!_ego_vehicle_physical_status_publisher) {
+    _ego_vehicle_physical_status_publisher = std::make_shared<CarlaEgoVehiclePhysicalStatusPublisher>();
   }
-  _hmc_vehicle_config_publisher->Write(
+  _ego_vehicle_physical_status_publisher->Write(
       _seconds, _nanoseconds, frame_id,
-      vehicle_width_m, vehicle_length_m, ignition_default_on);
-  _hmc_vehicle_config_publisher->Publish();
-  _hmc_vehicle_config_published.insert(actor);
+      brake_status, abs_status, tcs_status, esc_status,
+      current_gear,
+      yaw_rate_radps,
+      lateral_acceleration_mps2,
+      longitudinal_acceleration_mps2,
+      steering_wheel_angle_deg,
+      vehicle_width_m,
+      vehicle_length_m,
+      vehicle_speed_kmh,
+      ignition_status,
+      valid_signals);
+  _ego_vehicle_physical_status_publisher->Publish();
+}
+
+void ROS2::RegisterEgoVehiclePhysicalStatusCallback(
+    void* actor, ROS2::EgoVehiclePhysicalStatusCallback callback) {
+  std::lock_guard<std::recursive_mutex> lock(_mutex);
+  if (!actor || !callback) return;
+  _ego_vehicle_physical_status_callbacks[actor] = std::move(callback);
 }
 
 void ROS2::RegisterActor(void *actor, std::string ros_name, std::string frame_id, bool publish_tf) {
@@ -309,7 +335,7 @@ void ROS2::UnregisterVehicle(void *actor) {
   _actor_callbacks.erase(actor);
   _subscribers.erase(actor);
   _hmc_feedback_callbacks.erase(actor);
-  _hmc_vehicle_config_published.erase(actor);
+  _ego_vehicle_physical_status_callbacks.erase(actor);
 }
 
 void ROS2::RegisterHmcFeedbackCallback(void* actor, ROS2::HmcFeedbackCallback callback) {
@@ -655,9 +681,7 @@ void ROS2::Shutdown() {
   _clock_publisher.reset();
   _map_publisher.reset();
   _hmc_feedback_publisher.reset();
-  _hmc_vehicle_status_publisher.reset();
-  _hmc_vehicle_config_publisher.reset();
-  _hmc_vehicle_config_published.clear();
+  _ego_vehicle_physical_status_publisher.reset();
 
   _subscribers.clear();
 

@@ -16,6 +16,8 @@
 
 #include "GameFramework/Controller.h"
 
+#include <memory>
+
 #include <compiler/disable-ue4-macros.h>
 #include "carla/ros2/ROS2.h"
 #include <compiler/enable-ue4-macros.h>
@@ -215,18 +217,19 @@ FCarlaActor* UActorDispatcher::RegisterActor(
       {
         void* actor_ptr = static_cast<void*>(&Actor);
         AActor* ue_actor = &Actor;
+        auto handler = std::make_shared<ActorROS2Handler>(ue_actor, "");
         ROS2->RegisterVehicle(actor_ptr, RosName, RosName,
-          [ue_actor](void* /*Actor*/, carla::ros2::ROS2CallbackData Data) -> void
+          [handler](void* /*Actor*/, carla::ros2::ROS2CallbackData Data) -> void
           {
-            ActorROS2Handler Handler(ue_actor, "");
-            boost::variant2::visit(Handler, Data);
+            boost::variant2::visit(*handler, Data);
           });
         ROS2->RegisterHmcFeedbackCallback(actor_ptr,
-          [ue_actor]() {
-            ActorROS2Handler Handler(ue_actor, "");
-            Handler.PublishHmcFeedback();
-            Handler.PublishHmcVehicleStatus();
-            Handler.PublishHmcVehicleConfig();
+          [handler]() {
+            handler->PublishHmcFeedback();
+          });
+        ROS2->RegisterEgoVehiclePhysicalStatusCallback(actor_ptr,
+          [handler]() {
+            handler->PublishEgoVehiclePhysicalStatus();
           });
       }
     }

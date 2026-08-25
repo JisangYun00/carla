@@ -22,8 +22,7 @@ class ActorROS2Handler
     void operator()(carla::ros2::VehicleControl &Source);
     void operator()(carla::ros2::AckermannControl &Source);
     void PublishHmcFeedback();
-    void PublishHmcVehicleStatus();
-    void PublishHmcVehicleConfig();
+    void PublishEgoVehiclePhysicalStatus();
 
     private:
         AActor *_Actor {nullptr};
@@ -33,4 +32,9 @@ class ActorROS2Handler
         float _last_target_steer_ratio {0.0f};
         bool _last_stop_hold {false};
         uint8_t _last_target_gear {0x03}; // Neutral
+
+        // State for computing actor-frame acceleration from global velocity derivative.
+        FVector _last_global_velocity_mps {FVector::ZeroVector};
+        double _last_global_velocity_time_sec {0.0};
+        bool _has_last_global_velocity {false};
 };

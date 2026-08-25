@@ -14,6 +14,7 @@
 #include <carla/ros2/middleware/MiddlewareFactory.h>
 #include <carla/ros2/middleware/IPublisherMiddleware.h>
 #include <carla/ros2/middleware/ISubscriberMiddleware.h>
+#include <carla/ros2/publishers/CarlaEgoVehiclePhysicalStatusPublisher.h>
 #include <carla/ros2/publishers/CarlaIMUPublisher.h>
 #include <carla/ros2/publishers/PublisherImpl.h>
 #include <carla/ros2/subscribers/SubscriberImpl.h>
@@ -1453,7 +1454,92 @@ TEST(generic_cdr_pubsubtype_large_payload, size_provider_returns_actual_size_not
 }
 
 // ==========================================================================
-// Group 13: domain_id_resolution (15 tests)
+// Group 13: carla_ego_vehicle_physical_status_publisher (3 tests)
+// Non-Unreal unit tests for the atomic physical-status publisher: Write()
+// must populate every field and preserve the validity mask exactly.
+// ==========================================================================
+
+TEST(carla_ego_vehicle_physical_status_publisher, write_populates_all_fields) {
+  CarlaEgoVehiclePhysicalStatusPublisher publisher;
+
+  EXPECT_TRUE(publisher.Write(
+      42, 123456789u, "hero",
+      true, false, true, false,
+      5u,
+      0.125f, -1.5f, 2.25f, 12.5f,
+      1.95f, 4.65f, 55.0f,
+      true,
+      0x1FF7ull));
+
+  const auto* msg = publisher.GetMessageForTesting();
+  ASSERT_NE(msg, nullptr);
+  EXPECT_EQ(msg->header.stamp.sec, 42);
+  EXPECT_EQ(msg->header.stamp.nanosec, 123456789u);
+  EXPECT_EQ(msg->header.frame_id, "hero");
+  EXPECT_EQ(msg->brake_status, true);
+  EXPECT_EQ(msg->abs_status, false);
+  EXPECT_EQ(msg->tcs_status, true);
+  EXPECT_EQ(msg->esc_status, false);
+  EXPECT_EQ(msg->current_gear, 5u);
+  EXPECT_FLOAT_EQ(msg->yaw_rate_radps, 0.125f);
+  EXPECT_FLOAT_EQ(msg->lateral_acceleration_mps2, -1.5f);
+  EXPECT_FLOAT_EQ(msg->longitudinal_acceleration_mps2, 2.25f);
+  EXPECT_FLOAT_EQ(msg->steering_wheel_angle_deg, 12.5f);
+  EXPECT_FLOAT_EQ(msg->vehicle_width_m, 1.95f);
+  EXPECT_FLOAT_EQ(msg->vehicle_length_m, 4.65f);
+  EXPECT_FLOAT_EQ(msg->vehicle_speed_kmh, 55.0f);
+  EXPECT_EQ(msg->ignition_status, true);
+  EXPECT_EQ(msg->valid_signals, 0x1FF7ull);
+}
+
+TEST(carla_ego_vehicle_physical_status_publisher, valid_mask_strips_reserved_bits) {
+  CarlaEgoVehiclePhysicalStatusPublisher publisher;
+
+  // Only bits 0..12 are defined. Reserved bits 13..63 must be stripped by Write().
+  const uint64_t mask_with_reserved_set = 0xFFFFFFFFFFFFE000ull | 0x1FF7ull;
+  EXPECT_TRUE(publisher.Write(
+      0, 0u, "",
+      false, false, false, false,
+      0u,
+      0.0f, 0.0f, 0.0f, 0.0f,
+      0.0f, 0.0f, 0.0f,
+      false,
+      mask_with_reserved_set));
+
+  const auto* msg = publisher.GetMessageForTesting();
+  ASSERT_NE(msg, nullptr);
+  EXPECT_EQ(msg->valid_signals, 0x1FF7ull)
+      << "Write() must mask valid_signals to bits 0..12";
+}
+
+TEST(carla_ego_vehicle_physical_status_publisher, cdr_round_trip_after_write) {
+  CarlaEgoVehiclePhysicalStatusPublisher publisher;
+
+  EXPECT_TRUE(publisher.Write(
+      10, 500000000u, "vehicle",
+      true, false, false, false,
+      3u,
+      0.1f, -0.2f, 1.5f, 8.0f,
+      1.9f, 4.5f, 30.0f,
+      false,
+      0x0FF7ull));
+
+  const auto* msg = publisher.GetMessageForTesting();
+  ASSERT_NE(msg, nullptr);
+  const auto bytes = carla::ros2::serialize_to_cdr(*msg);
+  ASSERT_FALSE(bytes.empty());
+
+  carla::ros2::msg::CarlaEgoVehiclePhysicalStatus recovered{};
+  EXPECT_TRUE(carla::ros2::deserialize_from_cdr(bytes.data(), bytes.size(), recovered));
+  EXPECT_EQ(recovered.header.stamp.sec, 10);
+  EXPECT_EQ(recovered.header.frame_id, "vehicle");
+  EXPECT_EQ(recovered.current_gear, 3u);
+  EXPECT_FLOAT_EQ(recovered.vehicle_speed_kmh, 30.0f);
+  EXPECT_EQ(recovered.valid_signals, 0x0FF7ull);
+}
+
+// ==========================================================================
+// Group 14: domain_id_resolution (15 tests)
 // Pure tests for TryParseDomainId and ResolveDomainId. The environment value is
 // passed as a string, so the precedence rules need no real environment.
 // ==========================================================================

@@ -10,7 +10,32 @@
 #include "Carla/Vehicle/VehicleControl.h"
 #include "Carla/Vehicle/VehicleAckermannControl.h"
 
-void ActorROS2Handler::PublishHmcVehicleStatus()
+#include <cmath>
+#include <cstdlib>
+
+namespace {
+
+// Provider-owned steering-wheel to road-wheel ratio calibration.
+// Returns a positive value when the environment supplies a valid calibration;
+// otherwise returns 0.0f, which causes the SWA validity bit to stay cleared.
+float GetSteeringRatioCalibration() {
+  static const float ratio = []() -> float {
+    const char* value = std::getenv("CARLA_HMC_STEERING_RATIO");
+    if (!value) return 0.0f;
+    char* end = nullptr;
+    const float parsed = std::strtof(value, &end);
+    if (end != value && *end == '\0' &&
+        parsed > 0.0f && std::isfinite(parsed)) {
+      return parsed;
+    }
+    return 0.0f;
+  }();
+  return ratio;
+}
+
+} // namespace
+
+void ActorROS2Handler::PublishEgoVehiclePhysicalStatus()
 {
   ACarlaWheeledVehicle *Vehicle = Cast<ACarlaWheeledVehicle>(_Actor);
   if (!Vehicle) return;
@@ -19,39 +44,175 @@ void ActorROS2Handler::PublishHmcVehicleStatus()
   if (!ROS2 || !ROS2->IsEnabled()) return;
 
   const FVehicleControl &Control = Vehicle->GetVehicleControl();
-  const float SpeedKmh = Vehicle->GetVehicleForwardSpeed() * 0.036f;
-  const float ActualSwaDeg = Control.Steer * 540.0f;  // [VERIFY] max steer angle
+
+  // ---------------------------------------------------------------------------
+  // Chassis flags
+  // ---------------------------------------------------------------------------
+  const bool BrakeStatus = (Control.Brake > 0.01f);
+
+  // ---------------------------------------------------------------------------
+  // Current gear: CARLA exposes the actual transmission gear.
+  //   gear < 0  -> Reverse
+  //   gear == 0 -> Neutral
+  //   gear > 0  -> Drive
+  // Park is not distinguishable, so it is never published.
+  // ---------------------------------------------------------------------------
   const int32 Gear = Vehicle->GetVehicleCurrentGear();
-  uint8_t CurrentGear = 5u;  // default forward
-  if (Control.bReverse) CurrentGear = 2u;
-  else if (Control.bHandBrake) CurrentGear = 1u;
-  else if (Gear == 0) CurrentGear = 3u;  // neutral
-  else CurrentGear = 5u;
-  const uint8_t BrakeStatus = (Control.Brake > 0.01f) ? 1u : 0u;
-  // valid_flags: gear | brake | speed | swa | ignition
-  const uint64_t ValidFlags = (1u<<0) | (1u<<1) | (1u<<5) | (1u<<6) | (1u<<7);
-  ROS2->PublishHmcVehicleStatus(
-      _Actor, "vehicle",
-      CurrentGear, BrakeStatus,
-      SpeedKmh, ActualSwaDeg,
-      1u, ValidFlags);
-}
+  uint8_t CurrentGear = 5u;  // Drive default
+  if (Gear < 0) CurrentGear = 2u;       // Reverse
+  else if (Gear == 0) CurrentGear = 3u; // Neutral
+  else CurrentGear = 5u;                // Drive
 
-void ActorROS2Handler::PublishHmcVehicleConfig()
-{
-  ACarlaWheeledVehicle *Vehicle = Cast<ACarlaWheeledVehicle>(_Actor);
-  if (!Vehicle) return;
-
-  auto ROS2 = carla::ros2::ROS2::GetInstance();
-  if (!ROS2 || !ROS2->IsEnabled()) return;
-
+  // ---------------------------------------------------------------------------
+  // Geometry (UE4 bounding box extent is in centimeters)
+  // ---------------------------------------------------------------------------
   const FVector Extent = Vehicle->GetVehicleBoundingBoxExtent();
-  // UE4 bounding box is in centimeters; convert to meters.
-  const float WidthM = Extent.Y * 2.0f * 0.01f;
-  const float LengthM = Extent.X * 2.0f * 0.01f;
-  ROS2->PublishHmcVehicleConfig(
+  float WidthM = Extent.Y * 2.0f * 0.01f;
+  float LengthM = Extent.X * 2.0f * 0.01f;
+  if (!FMath::IsFinite(WidthM) || WidthM <= 0.0f) {
+    WidthM = 0.0f;
+  }
+  if (!FMath::IsFinite(LengthM) || LengthM <= 0.0f) {
+    LengthM = 0.0f;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Actor-frame physics from the root primitive component.
+  // UE4 actor frame: X forward, Y right, Z up (left-handed).
+  // ROS vehicle frame: X forward, Y left, Z up.
+  // Mapping matches CarlaIMUPublisher:  ros_y = -actor_y,  ros_z = -actor_z.
+  // ---------------------------------------------------------------------------
+  float YawRateRadps = 0.0f;
+  float LateralAccelerationMps2 = 0.0f;
+  float LongitudinalAccelerationMps2 = 0.0f;
+  float SteeringWheelAngleDeg = 0.0f;
+  float SpeedKmh = 0.0f;
+  bool AbsStatus = false;
+  bool TcsStatus = false;
+  bool EscStatus = false;
+  bool IgnitionStatus = false;
+  uint64_t ValidSignals = 0u;
+
+  // Gear is always considered valid because the mapping is well-defined.
+  ValidSignals |= (1u << 4);  // current_gear
+
+  UPrimitiveComponent* RootComponent = Cast<UPrimitiveComponent>(_Actor->GetRootComponent());
+  if (RootComponent) {
+    const FQuat ActorRotation = RootComponent->GetComponentTransform().GetRotation();
+
+    // Speed magnitude from global linear velocity (cm/s -> km/h).
+    const FVector GlobalVelocityCmps = RootComponent->GetPhysicsLinearVelocity();
+    const FVector GlobalVelocityMps = GlobalVelocityCmps * 0.01f;
+    if (GlobalVelocityCmps.IsZero()) {
+      SpeedKmh = 0.0f;
+    } else {
+      SpeedKmh = GlobalVelocityCmps.Size() * 0.036f;
+    }
+    if (FMath::IsFinite(SpeedKmh)) {
+      ValidSignals |= (1u << 11);  // vehicle_speed_kmh
+    }
+
+    // Yaw rate: actor-frame angular velocity Z mapped to ROS vehicle frame.
+    const FVector GlobalAngularVelocity = RootComponent->GetPhysicsAngularVelocityInRadians();
+    const FVector ActorAngularVelocity = ActorRotation.UnrotateVector(GlobalAngularVelocity);
+    if (FMath::IsFinite(ActorAngularVelocity.Z)) {
+      YawRateRadps = -ActorAngularVelocity.Z;
+      ValidSignals |= (1u << 5);  // yaw_rate_radps
+    }
+
+    // Lateral / longitudinal acceleration: derivative of global velocity,
+    // then rotated into the current actor frame.
+    int32_t CurrentSec = 0;
+    uint32_t CurrentNsec = 0u;
+    ROS2->GetTimestamp(CurrentSec, CurrentNsec);
+    const double CurrentTimeSec =
+        static_cast<double>(CurrentSec) +
+        static_cast<double>(CurrentNsec) * 1e-9;
+
+    if (_has_last_global_velocity) {
+      const double Dt = CurrentTimeSec - _last_global_velocity_time_sec;
+      if (std::isfinite(Dt) && Dt > 1e-6) {
+        const FVector GlobalAccMps2 =
+            (GlobalVelocityMps - _last_global_velocity_mps) / Dt;
+        if (FMath::IsFinite(GlobalAccMps2.X) &&
+            FMath::IsFinite(GlobalAccMps2.Y)) {
+          const FVector ActorAccMps2 = ActorRotation.UnrotateVector(GlobalAccMps2);
+          LongitudinalAccelerationMps2 = ActorAccMps2.X;
+          LateralAccelerationMps2 = -ActorAccMps2.Y;
+          ValidSignals |= (1u << 6);   // lateral_acceleration_mps2
+          ValidSignals |= (1u << 7);   // longitudinal_acceleration_mps2
+        }
+      }
+    }
+
+    _last_global_velocity_mps = GlobalVelocityMps;
+    _last_global_velocity_time_sec = CurrentTimeSec;
+    _has_last_global_velocity = true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Geometry validity: positive finite dimensions only.
+  // ---------------------------------------------------------------------------
+  if (FMath::IsFinite(WidthM) && WidthM > 0.0f) {
+    ValidSignals |= (1u << 9);   // vehicle_width_m
+  }
+  if (FMath::IsFinite(LengthM) && LengthM > 0.0f) {
+    ValidSignals |= (1u << 10);  // vehicle_length_m
+  }
+
+  // ---------------------------------------------------------------------------
+  // Brake status validity: finite threshold result.
+  // ---------------------------------------------------------------------------
+  if (FMath::IsFinite(Control.Brake)) {
+    ValidSignals |= (1u << 0);  // brake_status
+  }
+
+  // ---------------------------------------------------------------------------
+  // Steering wheel angle from actual wheel steer angle and provider calibration.
+  // Uses the average of the front wheels when both are available.
+  // ---------------------------------------------------------------------------
+  const float SteeringRatio = GetSteeringRatioCalibration();
+  if (SteeringRatio > 0.0f && FMath::IsFinite(SteeringRatio)) {
+    const float FlSteer = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FrontLeft);
+    const float FrSteer = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FrontRight);
+    float RoadWheelAngleDeg = 0.0f;
+    bool HaveValidWheelAngle = false;
+    if (FMath::IsFinite(FlSteer) && FMath::IsFinite(FrSteer)) {
+      RoadWheelAngleDeg = (FlSteer + FrSteer) * 0.5f;
+      HaveValidWheelAngle = true;
+    } else if (FMath::IsFinite(FlSteer)) {
+      RoadWheelAngleDeg = FlSteer;
+      HaveValidWheelAngle = true;
+    }
+    if (HaveValidWheelAngle) {
+      const float SwaDeg = RoadWheelAngleDeg * SteeringRatio;
+      if (FMath::IsFinite(SwaDeg)) {
+        SteeringWheelAngleDeg = SwaDeg;
+        ValidSignals |= (1u << 8);  // steering_wheel_angle_deg
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ABS/TCS/ESC/ignition are not exposed by CARLA: publish false with bits clear.
+  // ---------------------------------------------------------------------------
+
+  ROS2->PublishEgoVehiclePhysicalStatus(
       _Actor, "vehicle",
-      WidthM, LengthM, 1u);
+      BrakeStatus,
+      AbsStatus,
+      TcsStatus,
+      EscStatus,
+      CurrentGear,
+      YawRateRadps,
+      LateralAccelerationMps2,
+      LongitudinalAccelerationMps2,
+      SteeringWheelAngleDeg,
+      WidthM,
+      LengthM,
+      SpeedKmh,
+      IgnitionStatus,
+      ValidSignals);
 }
 
 void ActorROS2Handler::operator()(carla::ros2::VehicleControl &Source)
