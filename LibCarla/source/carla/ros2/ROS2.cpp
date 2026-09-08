@@ -357,15 +357,11 @@ std::string ROS2::GetActorRosName(void *actor) {
 
 std::string ROS2::GetActorBaseTopicName(void *actor) {
   std::lock_guard<std::recursive_mutex> lock(_mutex);
-  const auto ros_name = GetActorRosName(actor);
-  if (!ros_name.empty() && ros_name.front() == '/') {
-    return "rt" + ros_name;
-  }
   auto it = _actor_parent_map.find(actor);
   if (it != _actor_parent_map.end()) {
-    return GetActorBaseTopicName(it->second) + "/" + ros_name;
+    return GetActorBaseTopicName(it->second) + "/" + GetActorRosName(actor);
   } else {
-    return "rt/carla/" + ros_name;
+    return "rt/carla/" + GetActorRosName(actor);
   }
 }
 
