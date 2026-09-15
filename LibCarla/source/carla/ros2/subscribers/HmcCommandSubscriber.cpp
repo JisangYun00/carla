@@ -12,24 +12,20 @@
 namespace carla {
 namespace ros2 {
 
-  // Conversion helpers from HMC raw/physical units to CARLA VehicleControl.
-  // [VERIFY] scale factors match vehicle-specific APS/BPS calibration.
+  // Conversion helper from HMC raw SWA (0.1 degree) to CARLA input units.
   namespace {
     constexpr float kRawToPhysical = 0.1f;
 
     inline float raw_to_swa_deg(int16_t raw_deg) {
       return raw_deg * kRawToPhysical;
     }
-
-    inline float pct_to_throttle(uint16_t raw_pct) {
-      // AD-01 APS/BPS has a 0.1 percent factor.
-      return std::min(1.0f, raw_pct * kRawToPhysical / 100.0f);
-    }
   }
 
   ROS2CallbackData HmcCommandSubscriber::GetMessage() {
-    const bool ad01_new = _ad01_impl->HasNewMessage();
-    const bool ad02_new = _ad02_impl->HasNewMessage();
+    auto ad01 = _latest_ad01;
+    auto ad02 = _latest_ad02;
+    const bool ad01_new = _ad01_impl->TakeMessage(ad01);
+    const bool ad02_new = _ad02_impl->TakeMessage(ad02);
 
     const auto now = std::chrono::steady_clock::now();
     if (ad01_new) {
@@ -39,9 +35,6 @@ namespace ros2 {
     if (ad02_new) {
       _last_ad02_time = now;
     }
-
-    auto ad01 = ad01_new ? _ad01_impl->GetMessage() : _latest_ad01;
-    auto ad02 = ad02_new ? _ad02_impl->GetMessage() : _latest_ad02;
 
     // Cache latest values so AD-01/02 arriving at different times still merge.
     if (ad01_new) _latest_ad01 = ad01;
@@ -58,29 +51,29 @@ namespace ros2 {
     // Command timeout: fail-safe brake if no fresh AD-01/AD-02.
     if (source == HmcCommandSource::Timeout) {
       control.brake = 1.0f;
-      control.throttle = 0.0f;
-      control.steer = 0.0f;
       return control;
     }
 
-    // Normal command (AD-01). Preserve physical SWA until the Unreal actor
-    // can map it through the vehicle's road-wheel limit and steering ratio.
+    // AD-01 carries speed/steering targets. CARLA converts the speed target
+    // to pedal inputs in ActorROS2Handler, the drive-controller boundary.
+    control.hmc_command = true;
+    control.ad01_fresh = ad01_new;
+    control.speed_control = ad01.lng_ctrl_engage_req != 0u;
+    control.target_speed_kmh = static_cast<float>(ad01.target_speed_kmh) * kRawToPhysical;
     control.steer_is_steering_wheel_angle = true;
     if (ad01.lat_ctrl_engage_req) {
       control.steer = raw_to_swa_deg(ad01.target_swa_deg);
     }
-    if (ad01.lng_ctrl_engage_req) {
-      control.throttle = pct_to_throttle(ad01.target_aps_pct);
-      control.brake = pct_to_throttle(ad01.target_bps_pct);
-    }
 
     // A fresh active AD-02 remains authoritative between its 10 ms samples.
     if (source == HmcCommandSource::AD02) {
+      control.emergency_brake = ad02.emgc_brk_active != 0u;
       if (ad02.emgc_brk_active) {
         control.brake = 1.0f;
         control.throttle = 0.0f;
       }
       if (ad02.emgc_steer_active) {
+        control.steer_is_steering_wheel_angle = true;
         control.steer = raw_to_swa_deg(ad02.emgc_steer_ang_tgt_deg);
       }
     }
@@ -90,26 +83,31 @@ namespace ros2 {
     switch (ad01.target_gear) {
       case 0x01:  // Park
         control.gear = 0;
+        control.manual_gear_shift = true;
         control.hand_brake = true;
         control.reverse = false;
         break;
       case 0x02:  // Reverse
         control.gear = -1;
+        control.manual_gear_shift = true;
         control.hand_brake = false;
         control.reverse = true;
         break;
       case 0x03:  // Neutral
         control.gear = 0;
+        control.manual_gear_shift = true;
         control.hand_brake = false;
         control.reverse = false;
         break;
       case 0x05:  // Drive
         control.gear = 1;
+        control.manual_gear_shift = true;
         control.hand_brake = false;
         control.reverse = false;
         break;
       default:
         control.gear = 0;
+        control.manual_gear_shift = true;
         control.hand_brake = true;
         control.reverse = false;
         break;

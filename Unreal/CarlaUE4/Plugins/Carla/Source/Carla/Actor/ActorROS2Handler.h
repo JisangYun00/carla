@@ -17,7 +17,7 @@
  *
  * Revision History:
  *   2026-08-25: Jisang Yun - Replaced legacy HmcVehicleStatus/HmcVehicleConfig
- *               publishers with single CarlaEgoVehiclePhysicalStatusPublisher;
+ *               publishers with single CarlaVehiclePhysicalStatusPublisher;
  *               updated FB-01 SWA to use real wheel angle + steering ratio.
  */
 
@@ -39,7 +39,7 @@ class ActorROS2Handler
     void operator()(carla::ros2::VehicleControl &Source);
     void operator()(carla::ros2::AckermannControl &Source);
     void PublishHmcFeedback();
-    void PublishEgoVehiclePhysicalStatus();
+    void PublishVehiclePhysicalStatus();
 
     private:
         AActor *_Actor {nullptr};
@@ -49,6 +49,11 @@ class ActorROS2Handler
         float _last_target_steer_ratio {0.0f};
         bool _last_stop_hold {false};
         uint8_t _last_target_gear {0x03}; // Neutral
+        float _speed_integral_kmh_sec {0.0f};
+        float _last_target_speed_kmh {0.0f};
+        double _last_actuator_time_sec {-1.0};
+        double _stationary_since_sec {-1.0};
+        bool _has_target_speed_echo {false};
 
         // State for computing actor-frame acceleration from global velocity derivative.
         FVector _last_global_velocity_mps {FVector::ZeroVector};
