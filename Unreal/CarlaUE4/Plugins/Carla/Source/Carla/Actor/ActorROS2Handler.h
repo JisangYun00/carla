@@ -47,8 +47,11 @@ class ActorROS2Handler
         std::string _RosName;
 
         // HMC target echo and the virtual steering-wheel position sensor.
+        // A VCU powers up with a valid neutral steering command. Treat its
+        // 0-degree echo as valid until the first raw AD-01 target arrives;
+        // otherwise Safety's startup fail-safe cannot issue that first AD-01.
         float _last_target_swa_deg {0.0f};
-        bool _has_target_swa_echo {false};
+        bool _has_target_swa_echo {true};
         carla::ros2::HmcVirtualSteeringActuator _virtual_steering_actuator;
         bool _last_stop_hold {false};
         uint8_t _last_target_gear {0x03}; // Neutral

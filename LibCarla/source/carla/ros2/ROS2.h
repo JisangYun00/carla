@@ -14,9 +14,11 @@
 #include "carla/ros2/middleware/MiddlewareConfig.h"
 #include "carla/streaming/detail/Types.h"
 
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <mutex>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <memory>
@@ -95,9 +97,8 @@ class ROS2
     void RegisterVehicle(void *actor, std::string ros_name, std::string frame_id, ActorCallback callback);
     void UnregisterVehicle(void *actor);
 
-    // Register a callback that publishes HMC FB-01 from the UE4 game thread.
-    // Called once per registered hero vehicle. ROS2::SetTimestamp invokes it at
-    // the configured HMC feedback period (default 10 ms).
+    // Register a callback that refreshes the HMC feedback snapshot from the
+    // UE4 game thread. A separate virtual-VCU scheduler sends that snapshot.
     using HmcFeedbackCallback = std::function<void()>;
     void RegisterHmcFeedbackCallback(void* actor, HmcFeedbackCallback callback);
 
@@ -108,8 +109,8 @@ class ROS2
     void RegisterVehiclePhysicalStatusCallback(
         void* actor, VehiclePhysicalStatusCallback callback);
 
-    // Publish HMC FB-01 feedback for a vehicle.  Filled from the UE4 game
-    // thread where the ACarlaWheeledVehicle pointer is valid.
+    // Refresh the HMC FB-01 snapshot from the UE4 game thread where the
+    // ACarlaWheeledVehicle pointer is valid. The scheduler owns DDS writes.
     void PublishHmcFeedback(
         void *actor,
         float aps_pct,
@@ -206,6 +207,25 @@ class ROS2
     void ProcessDataFromMap(const std::string &open_drive);
 
   private:
+    struct HmcFeedbackSnapshot {
+      float aps_pct {0.0f};
+      float bps_pct {0.0f};
+      float actual_speed_kmh {0.0f};
+      float target_speed_echo_kmh {0.0f};
+      float actual_swa_deg {0.0f};
+      float target_swa_echo_deg {0.0f};
+      uint8_t lng_op_mode {0u};
+      uint8_t lat_op_mode {0u};
+      bool actuator_fault {false};
+      uint8_t lng_ctrl_ready {0u};
+      uint8_t lat_ctrl_ready {0u};
+      uint8_t gear_sel_ready {0u};
+      uint8_t stop_hold_ready {0u};
+    };
+
+    void StartHmcFeedbackScheduler();
+    void StopHmcFeedbackScheduler();
+    void RunHmcFeedbackScheduler();
     std::shared_ptr<CarlaTransformPublisher> GetOrCreateTransformPublisher(void *actor);
     std::shared_ptr<BasePublisher> GetOrCreateSensor(int type, void* actor);
 
@@ -230,10 +250,11 @@ class ROS2
   std::shared_ptr<HmcFeedbackPublisher> _hmc_feedback_publisher;
   std::shared_ptr<CarlaVehiclePhysicalStatusPublisher> _ego_vehicle_physical_status_publisher;
 
-  // HMC feedback callbacks registered by hero vehicles. Invoked from
-  // SetTimestamp at the configured feedback period.
+  // Game-thread snapshots and their independent virtual-VCU transport loop.
   std::unordered_map<void*, HmcFeedbackCallback> _hmc_feedback_callbacks;
-  std::chrono::steady_clock::time_point _last_hmc_feedback_publish;
+  std::unordered_map<void*, HmcFeedbackSnapshot> _hmc_feedback_snapshots;
+  std::atomic<bool> _hmc_feedback_scheduler_running {false};
+  std::thread _hmc_feedback_scheduler;
   static constexpr auto kHmcFeedbackPeriod = std::chrono::milliseconds(10);
 
   // Ego-vehicle physical status callbacks registered by hero vehicles.

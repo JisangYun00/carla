@@ -88,29 +88,36 @@ enum ESensors {
 };
 
 bool ROS2::Enable(bool enable, Middleware middleware, int domain_id) {
-  std::lock_guard<std::recursive_mutex> lock(_mutex);
-  if (enable) {
-    auto resolve = MiddlewareFactory::ResolveMiddleware(middleware);
-    if (!resolve.success) {
-      log_error("ROS2: middleware '", MiddlewareToString(middleware),
-          "' is not compiled into this binary. ROS2 is DISABLED.");
-      return false;
+  {
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
+    if (enable) {
+      auto resolve = MiddlewareFactory::ResolveMiddleware(middleware);
+      if (!resolve.success) {
+        log_error("ROS2: middleware '", MiddlewareToString(middleware),
+            "' is not compiled into this binary. ROS2 is DISABLED.");
+        return false;
+      }
+      MiddlewareFactory::SetMiddleware(middleware);
+      // Configure the domain id before any transport context is created (the
+      // shared participants are created lazily on first publisher/subscriber).
+      MiddlewareConfig::SetDomainId(domain_id);
+      const ResolvedDomainId resolved = MiddlewareConfig::ResolveEffective();
+      const char* domain_source =
+          (resolved.source == DomainIdSource::CommandLine)  ? "--ros-domain-id"
+          : (resolved.source == DomainIdSource::Environment) ? "ROS_DOMAIN_ID"
+                                                             : "default";
+      log_info("ROS2: using middleware: ",
+          MiddlewareToString(middleware), ", domain id: ", resolved.id,
+          " (", domain_source, ")");
+      _clock_publisher = std::make_shared<CarlaClockPublisher>();
     }
-    MiddlewareFactory::SetMiddleware(middleware);
-    // Configure the domain id before any transport context is created (the
-    // shared participants are created lazily on first publisher/subscriber).
-    MiddlewareConfig::SetDomainId(domain_id);
-    const ResolvedDomainId resolved = MiddlewareConfig::ResolveEffective();
-    const char* domain_source =
-        (resolved.source == DomainIdSource::CommandLine)  ? "--ros-domain-id"
-        : (resolved.source == DomainIdSource::Environment) ? "ROS_DOMAIN_ID"
-                                                           : "default";
-    log_info("ROS2: using middleware: ",
-        MiddlewareToString(middleware), ", domain id: ", resolved.id,
-        " (", domain_source, ")");
-    _clock_publisher = std::make_shared<CarlaClockPublisher>();
+    _enabled = enable;
   }
-  _enabled = enable;
+  if (enable) {
+    StartHmcFeedbackScheduler();
+  } else {
+    StopHmcFeedbackScheduler();
+  }
   return true;
 }
 
@@ -140,16 +147,10 @@ void ROS2::SetTimestamp(double timestamp) {
   _clock_publisher->Write(_seconds, _nanoseconds);
   _clock_publisher->Publish();
 
-  // HMC: publish FB-01 at 10 ms independently of command arrival.
-  const auto now = std::chrono::steady_clock::now();
-  if (now - _last_hmc_feedback_publish >= kHmcFeedbackPeriod) {
-    if (!_hmc_feedback_publisher) {
-      _hmc_feedback_publisher = std::make_shared<HmcFeedbackPublisher>();
-    }
-    for (auto& pair : _hmc_feedback_callbacks) {
-      pair.second();
-    }
-    _last_hmc_feedback_publish = now;
+  // Refresh actor-owned state on the game thread. DDS publication itself is
+  // performed by the independent virtual-VCU scheduler.
+  for (auto& pair : _hmc_feedback_callbacks) {
+    pair.second();
   }
 
   // Physical status: publish at 100 ms measured against the simulation timestamp.
@@ -208,17 +209,7 @@ void ROS2::PublishHmcFeedback(
   if (!_enabled || _actor_callbacks.find(actor) == _actor_callbacks.end()) {
     return;
   }
-  if (!_hmc_feedback_publisher) {
-    _hmc_feedback_publisher = std::make_shared<HmcFeedbackPublisher>();
-  }
-  static uint8_t s_alive_counter = 0u;
-  // Environment knobs may only disable a ready signal; they must never
-  // override an unsafe Actor-level assertion to true.
-  const auto and_ready = [](uint8_t passed, uint8_t env) -> uint8_t {
-    return (passed == 1u && env == 1u) ? 1u : 0u;
-  };
-  _hmc_feedback_publisher->Write(
-      s_alive_counter++,
+  _hmc_feedback_snapshots[actor] = HmcFeedbackSnapshot{
       aps_pct,
       bps_pct,
       actual_speed_kmh,
@@ -228,11 +219,75 @@ void ROS2::PublishHmcFeedback(
       lng_op_mode,
       lat_op_mode,
       actuator_fault,
-      and_ready(lng_ctrl_ready, env_lng_ready),
-      and_ready(lat_ctrl_ready, env_lat_ready),
-      and_ready(gear_sel_ready, env_gear_ready),
-      stop_hold_ready);
-  _hmc_feedback_publisher->Publish();
+      env_lng_ready == 1u ? lng_ctrl_ready : 0u,
+      env_lat_ready == 1u ? lat_ctrl_ready : 0u,
+      env_gear_ready == 1u ? gear_sel_ready : 0u,
+      stop_hold_ready};
+}
+
+void ROS2::StartHmcFeedbackScheduler() {
+  if (_hmc_feedback_scheduler_running.exchange(true)) {
+    return;
+  }
+  _hmc_feedback_scheduler = std::thread([this]() { RunHmcFeedbackScheduler(); });
+}
+
+void ROS2::StopHmcFeedbackScheduler() {
+  if (!_hmc_feedback_scheduler_running.exchange(false)) {
+    return;
+  }
+  if (_hmc_feedback_scheduler.joinable()) {
+    _hmc_feedback_scheduler.join();
+  }
+}
+
+void ROS2::RunHmcFeedbackScheduler() {
+  uint8_t alive_counter = 0u;
+  auto next_publish = std::chrono::steady_clock::now();
+  while (_hmc_feedback_scheduler_running.load()) {
+    std::shared_ptr<HmcFeedbackPublisher> publisher;
+    std::vector<HmcFeedbackSnapshot> snapshots;
+    {
+      // The game thread owns actor access and can hold _mutex while a frame is
+      // being processed. Copy its POD snapshots, then keep DDS writes outside
+      // that lock so a delayed game frame cannot delay the VCU heartbeat.
+      std::lock_guard<std::recursive_mutex> lock(_mutex);
+      if (_enabled && !_hmc_feedback_snapshots.empty()) {
+        if (!_hmc_feedback_publisher) {
+          _hmc_feedback_publisher = std::make_shared<HmcFeedbackPublisher>();
+        }
+        publisher = _hmc_feedback_publisher;
+        snapshots.reserve(_hmc_feedback_snapshots.size());
+        for (const auto& pair : _hmc_feedback_snapshots) {
+          snapshots.push_back(pair.second);
+        }
+      }
+    }
+    for (const auto& feedback : snapshots) {
+      publisher->Write(
+          alive_counter++,
+          feedback.aps_pct,
+          feedback.bps_pct,
+          feedback.actual_speed_kmh,
+          feedback.target_speed_echo_kmh,
+          feedback.actual_swa_deg,
+          feedback.target_swa_echo_deg,
+          feedback.lng_op_mode,
+          feedback.lat_op_mode,
+          feedback.actuator_fault,
+          feedback.lng_ctrl_ready,
+          feedback.lat_ctrl_ready,
+          feedback.gear_sel_ready,
+          feedback.stop_hold_ready);
+      publisher->Publish();
+    }
+    next_publish += kHmcFeedbackPeriod;
+    const auto now = std::chrono::steady_clock::now();
+    if (next_publish < now) {
+      next_publish = now;
+    }
+    std::this_thread::sleep_until(next_publish);
+  }
 }
 
 void ROS2::PublishVehiclePhysicalStatus(
@@ -350,6 +405,7 @@ void ROS2::UnregisterVehicle(void *actor) {
   _actor_callbacks.erase(actor);
   _subscribers.erase(actor);
   _hmc_feedback_callbacks.erase(actor);
+  _hmc_feedback_snapshots.erase(actor);
   _ego_vehicle_physical_status_callbacks.erase(actor);
 }
 
@@ -685,6 +741,7 @@ void ROS2::ProcessDataFromMap(const std::string &open_drive) {
 }
 
 void ROS2::Shutdown() {
+  StopHmcFeedbackScheduler();
   std::lock_guard<std::recursive_mutex> lock(_mutex);
   // Destroy publishers first so DataWriter unregister-dispose messages are
   // sent while the shared DomainParticipant is still alive, then clear
@@ -696,6 +753,7 @@ void ROS2::Shutdown() {
   _clock_publisher.reset();
   _map_publisher.reset();
   _hmc_feedback_publisher.reset();
+  _hmc_feedback_snapshots.clear();
   _ego_vehicle_physical_status_publisher.reset();
 
   _subscribers.clear();
