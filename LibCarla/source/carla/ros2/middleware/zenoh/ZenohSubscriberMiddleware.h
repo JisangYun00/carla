@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <string>
 
 #ifndef CARLA_ROS2_MIDDLEWARE_TESTING
@@ -57,10 +58,16 @@ class ZenohSubscriberMiddleware : public ISubscriberMiddleware {
   bool Init(
       const std::string& topic_name,
       void* message_ptr,
-      bool* new_message_flag) override
+      bool* new_message_flag,
+      std::mutex* message_mutex) override
   {
     _message_ptr     = static_cast<msg_type*>(message_ptr);
     _new_message_ptr = new_message_flag;
+    _message_mutex   = message_mutex;
+    if (_message_mutex == nullptr) {
+      log_error("ZenohSubscriberMiddleware: Missing mailbox mutex");
+      return false;
+    }
 
     const z_loaned_session_t* session = zenoh_get_shared_session();
 
@@ -140,10 +147,13 @@ class ZenohSubscriberMiddleware : public ISubscriberMiddleware {
     const z_loaned_slice_t* ls = z_slice_loan(&slice);
     const uint8_t* data = z_slice_data(ls);
     const size_t   len  = z_slice_len(ls);
-    if (!deserialize_from_cdr(data, len, *self->_message_ptr)) {
+    msg_type received{};
+    if (!deserialize_from_cdr(data, len, received)) {
       log_error("ZenohSubscriberMiddleware (", self->_topic_name,
                 "): deserialization failed");
     } else {
+      std::lock_guard<std::mutex> lock(*self->_message_mutex);
+      *self->_message_ptr = received;
       *self->_new_message_ptr = true;
     }
     z_drop(z_move(slice));
@@ -154,6 +164,7 @@ class ZenohSubscriberMiddleware : public ISubscriberMiddleware {
 
   msg_type* _message_ptr     { nullptr };
   bool*     _new_message_ptr { nullptr };
+  std::mutex* _message_mutex { nullptr };
 
   std::atomic<bool> _alive { false };
   std::string       _topic_name;

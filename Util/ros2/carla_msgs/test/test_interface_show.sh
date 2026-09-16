@@ -6,7 +6,7 @@
 #
 # Author: Jisang Yun <jisangyun@hanyang.ac.kr>
 #
-# Build the carla_msgs package and verify that CarlaEgoVehiclePhysicalStatus
+# Build the carla_msgs package and verify that CarlaVehiclePhysicalStatus
 # is generated and can be introspected with `ros2 interface show`.
 
 set -euo pipefail
@@ -42,11 +42,11 @@ set +u
 source "${WS_DIR}/install/setup.bash"
 set -u
 
-echo "==> ros2 interface show carla_msgs/msg/CarlaEgoVehiclePhysicalStatus"
-ros2 interface show carla_msgs/msg/CarlaEgoVehiclePhysicalStatus
+echo "==> ros2 interface show carla_msgs/msg/CarlaVehiclePhysicalStatus"
+ros2 interface show carla_msgs/msg/CarlaVehiclePhysicalStatus
 
 echo "==> Verifying expected fields"
-INTERFACE_OUTPUT="$(ros2 interface show carla_msgs/msg/CarlaEgoVehiclePhysicalStatus)"
+INTERFACE_OUTPUT="$(ros2 interface show carla_msgs/msg/CarlaVehiclePhysicalStatus)"
 for field in \
   "std_msgs/Header header" \
   "bool brake_status" \
@@ -61,16 +61,20 @@ for field in \
   "float32 vehicle_width_m" \
   "float32 vehicle_length_m" \
   "float32 vehicle_speed_kmh" \
+  "float32 wheel_angular_velocity_fl_radps" \
+  "float32 wheel_angular_velocity_fr_radps" \
+  "float32 wheel_angular_velocity_rl_radps" \
+  "float32 wheel_angular_velocity_rr_radps" \
   "bool ignition_status" \
-  "uint64 valid_signals"; do
+  "uint64 valid_fields"; do
   if ! grep -qF "${field}" <<<"${INTERFACE_OUTPUT}"; then
     echo "ERROR: expected field missing: ${field}"
     exit 1
   fi
 done
 
-echo "==> ros2 interface list | grep CarlaEgoVehiclePhysicalStatus"
-ros2 interface list | grep CarlaEgoVehiclePhysicalStatus
+echo "==> ros2 interface list | grep CarlaVehiclePhysicalStatus"
+ros2 interface list | grep CarlaVehiclePhysicalStatus
 
 echo "==> Verifying RespawnVehicle service"
 RESPAWN_OUTPUT="$(ros2 interface show carla_msgs/srv/RespawnVehicle)"

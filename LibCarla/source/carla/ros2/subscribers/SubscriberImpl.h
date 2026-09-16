@@ -5,6 +5,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include "carla/ros2/subscribers/BaseSubscriber.h"
@@ -31,7 +32,8 @@ namespace ros2 {
 #ifdef LIBCARLA_WITH_GTEST
       }
 #endif
-      return _middleware->Init(topic_name, &_message, &_new_message);
+      return _middleware->Init(
+          topic_name, &_message, &_new_message, &_message_mutex);
     }
 
     std::string GetTopicName() {
@@ -49,11 +51,23 @@ namespace ros2 {
     }
 
     msg_type GetMessage() {
+      std::lock_guard<std::mutex> lock(_message_mutex);
       _new_message = false;
       return _message;
     }
 
-    bool HasNewMessage() { return _new_message; }
+    bool HasNewMessage() {
+      std::lock_guard<std::mutex> lock(_message_mutex);
+      return _new_message;
+    }
+
+    bool TakeMessage(msg_type& message) {
+      std::lock_guard<std::mutex> lock(_message_mutex);
+      if (!_new_message) return false;
+      message = _message;
+      _new_message = false;
+      return true;
+    }
 
 #ifdef LIBCARLA_WITH_GTEST
     void SetMiddlewareForTesting(std::unique_ptr<ISubscriberMiddleware> middleware) {
@@ -61,6 +75,7 @@ namespace ros2 {
     }
 
     void SimulateMessageReceiptForTesting(const msg_type& msg) {
+      std::lock_guard<std::mutex> lock(_message_mutex);
       _message = msg;
       _new_message = true;
     }
@@ -70,6 +85,7 @@ namespace ros2 {
     std::unique_ptr<ISubscriberMiddleware> _middleware;
     msg_type _message;
     bool _new_message { false };
+    std::mutex _message_mutex;
   };
 
 }  // namespace ros2

@@ -12,6 +12,7 @@
 #include "carla/Logging.h"
 
 #include <atomic>
+#include <mutex>
 
 #ifndef CARLA_ROS2_MIDDLEWARE_TESTING
 #ifdef CARLA_ROS2_MIDDLEWARE_CYCLONEDDS
@@ -59,10 +60,16 @@ class CycloneDDSSubscriberMiddleware : public ISubscriberMiddleware {
   bool Init(
       const std::string& topic_name,
       void* message_ptr,
-      bool* new_message_flag) override
+      bool* new_message_flag,
+      std::mutex* message_mutex) override
   {
     _message_ptr     = static_cast<msg_type*>(message_ptr);
     _new_message_ptr = new_message_flag;
+    _message_mutex   = message_mutex;
+    if (_message_mutex == nullptr) {
+      log_error("CycloneDDSSubscriberMiddleware: Missing mailbox mutex");
+      return false;
+    }
 
     dds_entity_t participant = carla_cdr_get_participant();
     if (participant < 0) {
@@ -133,16 +140,23 @@ class CycloneDDSSubscriberMiddleware : public ISubscriberMiddleware {
     struct ddsi_serdata* sd = nullptr;
     dds_sample_info_t   info;
     dds_return_t rc = dds_takecdr(reader, &sd, 1u, &info, DDS_ANY_STATE);
-    if (rc <= 0 || !sd) { return; }
+    if (rc < 0) {
+      log_error("CycloneDDSSubscriberMiddleware::on_data_available (",
+                self->_topic_name, "): take failed with code:", rc);
+      return;
+    }
+    if (rc == 0 || !sd) { return; }
 
     if (info.valid_data) {
+      msg_type received{};
       const uint8_t* data = carla_cdr_data(sd);
       const uint32_t size = carla_cdr_size(sd);
-      if (!deserialize_from_cdr(data, static_cast<size_t>(size),
-                                *self->_message_ptr)) {
+      if (!deserialize_from_cdr(data, static_cast<size_t>(size), received)) {
         log_error("CycloneDDSSubscriberMiddleware::on_data_available (",
                   self->_topic_name, "): deserialization failed");
       } else {
+        std::lock_guard<std::mutex> lock(*self->_message_mutex);
+        *self->_message_ptr = received;
         *self->_new_message_ptr = true;
       }
     }
@@ -155,6 +169,7 @@ class CycloneDDSSubscriberMiddleware : public ISubscriberMiddleware {
 
   msg_type* _message_ptr     { nullptr };
   bool*     _new_message_ptr { nullptr };
+  std::mutex* _message_mutex { nullptr };
 
   std::string        _topic_name;
   std::atomic<bool>  _alive { false };

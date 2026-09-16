@@ -48,7 +48,7 @@ namespace ros2 {
   class CarlaClockPublisher;
   class CarlaMapPublisher;
   class HmcFeedbackPublisher;
-  class CarlaEgoVehiclePhysicalStatusPublisher;
+  class CarlaVehiclePhysicalStatusPublisher;
 
 class ROS2
 {
@@ -67,7 +67,7 @@ class ROS2
     // Callers pass enable=false to shut down; the return value is always true in that case.
     // domain_id selects the ROS 2 domain id for the chosen middleware; kUnsetDomainId
     // (the default) keeps each middleware's native default.
-    bool Enable(bool enable, Middleware middleware = Middleware::FastDDS,
+    bool Enable(bool enable, Middleware middleware = Middleware::CycloneDDS,
         int domain_id = kUnsetDomainId);
     void Shutdown();
 
@@ -104,9 +104,9 @@ class ROS2
     // Register a callback that publishes the atomic ego-vehicle physical status.
     // ROS2::SetTimestamp invokes it at the configured physical-status period
     // (100 ms) independently of the HMC feedback period.
-    using EgoVehiclePhysicalStatusCallback = std::function<void()>;
-    void RegisterEgoVehiclePhysicalStatusCallback(
-        void* actor, EgoVehiclePhysicalStatusCallback callback);
+    using VehiclePhysicalStatusCallback = std::function<void()>;
+    void RegisterVehiclePhysicalStatusCallback(
+        void* actor, VehiclePhysicalStatusCallback callback);
 
     // Publish HMC FB-01 feedback for a vehicle.  Filled from the UE4 game
     // thread where the ACarlaWheeledVehicle pointer is valid.
@@ -123,10 +123,11 @@ class ROS2
         bool actuator_fault,
         uint8_t lng_ctrl_ready,
         uint8_t lat_ctrl_ready,
-        uint8_t gear_sel_ready);
+        uint8_t gear_sel_ready,
+        uint8_t stop_hold_ready);
 
     // Publish the atomic ego-vehicle physical status snapshot.
-    void PublishEgoVehiclePhysicalStatus(
+    void PublishVehiclePhysicalStatus(
         void *actor,
         const std::string& frame_id,
         bool brake_status,
@@ -141,8 +142,12 @@ class ROS2
         float vehicle_width_m,
         float vehicle_length_m,
         float vehicle_speed_kmh,
+        float wheel_angular_velocity_fl_radps,
+        float wheel_angular_velocity_fr_radps,
+        float wheel_angular_velocity_rl_radps,
+        float wheel_angular_velocity_rr_radps,
         bool ignition_status,
-        uint64_t valid_signals);
+        uint64_t valid_fields);
 
     // Receiving data to publish
     void ProcessDataFromCamera(
@@ -223,7 +228,7 @@ class ROS2
   std::shared_ptr<CarlaClockPublisher> _clock_publisher;
   std::shared_ptr<CarlaMapPublisher> _map_publisher;
   std::shared_ptr<HmcFeedbackPublisher> _hmc_feedback_publisher;
-  std::shared_ptr<CarlaEgoVehiclePhysicalStatusPublisher> _ego_vehicle_physical_status_publisher;
+  std::shared_ptr<CarlaVehiclePhysicalStatusPublisher> _ego_vehicle_physical_status_publisher;
 
   // HMC feedback callbacks registered by hero vehicles. Invoked from
   // SetTimestamp at the configured feedback period.
@@ -234,10 +239,10 @@ class ROS2
   // Ego-vehicle physical status callbacks registered by hero vehicles.
   // Invoked from SetTimestamp at the configured physical-status period
   // (100 ms) measured against the simulation timestamp.
-  std::unordered_map<void*, EgoVehiclePhysicalStatusCallback> _ego_vehicle_physical_status_callbacks;
+  std::unordered_map<void*, VehiclePhysicalStatusCallback> _ego_vehicle_physical_status_callbacks;
   int64_t _last_ego_vehicle_physical_status_timestamp_ns { -1 };
-  static constexpr int64_t kEgoVehiclePhysicalStatusPeriodNs = 100000000LL;  // 100 ms
-  static constexpr int64_t kEgoVehiclePhysicalStatusRewindThresholdNs = -1000000LL;  // -1 ms
+  static constexpr int64_t kVehiclePhysicalStatusPeriodNs = 100000000LL;  // 100 ms
+  static constexpr int64_t kVehiclePhysicalStatusRewindThresholdNs = -1000000LL;  // -1 ms
 
   // actor->parent relationship
   std::unordered_map<void *, void *> _actor_parent_map;

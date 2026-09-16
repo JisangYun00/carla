@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: MIT
 //
 /**
- * Module:      CarlaEgoVehiclePhysicalStatusPublisher.h
- * Description: carla_msgs::msg::CarlaEgoVehiclePhysicalStatus publisher.
+ * Module:      CarlaVehiclePhysicalStatusPublisher.h
+ * Description: carla_msgs::msg::CarlaVehiclePhysicalStatus publisher.
  *              Publishes the atomic vehicle physical status snapshot on
- *              rt/carla/ego_vehicle_physical_status.
+ *              rt/carla/hero/vehicle_physical_status.
  *
  * Authors:
  *   Jisang Yun (jisangyun@hanyang.ac.kr)
@@ -24,7 +24,7 @@
 #include "carla/ros2/publishers/BasePublisher.h"
 #include "carla/ros2/publishers/PublisherImpl.h"
 
-#include "carla/ros2/types/msg/CarlaEgoVehiclePhysicalStatus.h"
+#include "carla/ros2/types/msg/CarlaVehiclePhysicalStatus.h"
 
 namespace carla {
 namespace ros2 {
@@ -32,17 +32,17 @@ namespace ros2 {
   // CARLA ego-vehicle physical status provider publisher.
   // Publishes a single atomic message containing vehicle geometry, kinematics,
   // chassis flags and a per-signal validity mask.
-  class CarlaEgoVehiclePhysicalStatusPublisher : public BasePublisher {
+  class CarlaVehiclePhysicalStatusPublisher : public BasePublisher {
     public:
       struct Traits {
-        using msg_type = msg::CarlaEgoVehiclePhysicalStatus;
+        using msg_type = msg::CarlaVehiclePhysicalStatus;
       };
 
-      CarlaEgoVehiclePhysicalStatusPublisher() :
-        BasePublisher("rt/carla/ego_vehicle_physical_status"),
+      CarlaVehiclePhysicalStatusPublisher() :
+        BasePublisher("rt/carla/hero/vehicle_physical_status"),
         _impl(std::make_shared<PublisherImpl<Traits>>()) {
-          if (!_impl->Init("rt/carla/ego_vehicle_physical_status")) {
-            log_warning("CarlaEgoVehiclePhysicalStatusPublisher: Init failed");
+          if (!_impl->Init("rt/carla/hero/vehicle_physical_status")) {
+            log_warning("CarlaVehiclePhysicalStatusPublisher: Init failed");
           }
       }
 
@@ -66,11 +66,15 @@ namespace ros2 {
           float vehicle_width_m,
           float vehicle_length_m,
           float vehicle_speed_kmh,
+          float wheel_angular_velocity_fl_radps,
+          float wheel_angular_velocity_fr_radps,
+          float wheel_angular_velocity_rl_radps,
+          float wheel_angular_velocity_rr_radps,
           bool ignition_status,
-          uint64_t valid_signals);
+          uint64_t valid_fields);
 
 #ifdef LIBCARLA_WITH_GTEST
-      const msg::CarlaEgoVehiclePhysicalStatus* GetMessageForTesting() const {
+      const msg::CarlaVehiclePhysicalStatus* GetMessageForTesting() const {
         return _impl->GetMessage();
       }
 #endif

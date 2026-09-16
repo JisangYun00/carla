@@ -227,9 +227,9 @@ FCarlaActor* UActorDispatcher::RegisterActor(
           [handler]() {
             handler->PublishHmcFeedback();
           });
-        ROS2->RegisterEgoVehiclePhysicalStatusCallback(actor_ptr,
+        ROS2->RegisterVehiclePhysicalStatusCallback(actor_ptr,
           [handler]() {
-            handler->PublishEgoVehiclePhysicalStatus();
+            handler->PublishVehiclePhysicalStatus();
           });
       }
     }

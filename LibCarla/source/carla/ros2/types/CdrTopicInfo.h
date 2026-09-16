@@ -11,7 +11,7 @@
 #include "carla/ros2/types/msg/CameraInfo.h"
 #include "carla/ros2/types/msg/CarlaCollisionEvent.h"
 #include "carla/ros2/types/msg/CarlaEgoVehicleControl.h"
-#include "carla/ros2/types/msg/CarlaEgoVehiclePhysicalStatus.h"
+#include "carla/ros2/types/msg/CarlaVehiclePhysicalStatus.h"
 #include "carla/ros2/types/msg/CarlaLineInvasion.h"
 #include "carla/ros2/types/msg/Clock.h"
 #include "carla/ros2/types/msg/Float32.h"
@@ -132,14 +132,14 @@ template<> struct CdrTopicInfo<msg::CarlaEgoVehicleControl> {
   static size_t max_serialized_size() { return 289u; }
 };
 
-template<> struct CdrTopicInfo<msg::CarlaEgoVehiclePhysicalStatus> {
+template<> struct CdrTopicInfo<msg::CarlaVehiclePhysicalStatus> {
   static const char* type_name() {
-    return "carla_msgs::msg::dds_::CarlaEgoVehiclePhysicalStatus_";
+    return "carla_msgs::msg::dds_::CarlaVehiclePhysicalStatus_";
   }
   static const char* type_hash() {
-    return "RIHS01_855c6a5a002e659af2a3ef2346011e0a943b9c79a463ebd1734d000b4298ab1f";
+    return "RIHS01_16d5f0f617a093703700abe8a36a157de846ee02267710ac70b5d2fb3d4987a2";
   }
-  static size_t max_serialized_size() { return 320u; }
+  static size_t max_serialized_size() { return 336u; }
 };
 
 template<> struct CdrTopicInfo<msg::CarlaLineInvasion> {

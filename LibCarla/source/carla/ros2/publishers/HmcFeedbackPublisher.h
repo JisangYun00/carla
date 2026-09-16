@@ -48,7 +48,8 @@ namespace ros2 {
           bool actuator_fault,
           uint8_t lng_ctrl_ready,
           uint8_t lat_ctrl_ready,
-          uint8_t gear_sel_ready);
+          uint8_t gear_sel_ready,
+          uint8_t stop_hold_ready);
 
 #ifdef LIBCARLA_WITH_GTEST
       const msg::HmcFB01* GetMessageForTesting() const {

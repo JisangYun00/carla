@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Module:      CarlaEgoVehiclePhysicalStatus.h
- * Description: Native POD for carla_msgs::msg::CarlaEgoVehiclePhysicalStatus.
+ * Module:      CarlaVehiclePhysicalStatus.h
+ * Description: Native POD for carla_msgs::msg::CarlaVehiclePhysicalStatus.
  *              Mirrors the canonical .msg definition in
- *              Util/ros2/carla_msgs/msg/CarlaEgoVehiclePhysicalStatus.msg.
+ *              Util/ros2/carla_msgs/msg/CarlaVehiclePhysicalStatus.msg.
  *              All numeric fields use the exact ROS 2 IDL primitive types so
  *              that Fast-CDR serialization is byte-compatible with generated
  *              ROS 2 bindings.
@@ -28,7 +28,7 @@ namespace carla {
 namespace ros2 {
 namespace msg {
 
-struct CarlaEgoVehiclePhysicalStatus {
+struct CarlaVehiclePhysicalStatus {
   Header header {};
   bool brake_status = false;
   bool abs_status = false;
@@ -42,8 +42,12 @@ struct CarlaEgoVehiclePhysicalStatus {
   float vehicle_width_m = 0.0f;
   float vehicle_length_m = 0.0f;
   float vehicle_speed_kmh = 0.0f;
+  float wheel_angular_velocity_fl_radps = 0.0f;
+  float wheel_angular_velocity_fr_radps = 0.0f;
+  float wheel_angular_velocity_rl_radps = 0.0f;
+  float wheel_angular_velocity_rr_radps = 0.0f;
   bool ignition_status = false;
-  uint64_t valid_signals = 0u;
+  uint64_t valid_fields = 0u;
 };
 
 } // namespace msg

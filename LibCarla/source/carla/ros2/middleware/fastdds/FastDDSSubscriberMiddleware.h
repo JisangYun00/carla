@@ -24,6 +24,7 @@
 #include <fastrtps/qos/QosPolicies.h>
 
 #include <atomic>
+#include <mutex>
 
 namespace carla {
 namespace ros2 {
@@ -62,10 +63,13 @@ class FastDDSSubscriberMiddleware
 
   void on_data_available(efd::DataReader* reader) override {
     efd::SampleInfo info;
-    erc rcode = reader->take_next_sample(_message_ptr, &info);
-    if (rcode == erc::ReturnCodeValue::RETCODE_OK) {
+    msg_type received{};
+    erc rcode = reader->take_next_sample(&received, &info);
+    if (rcode == erc::ReturnCodeValue::RETCODE_OK && info.valid_data) {
+      std::lock_guard<std::mutex> lock(*_message_mutex);
+      *_message_ptr = received;
       *_new_message_ptr = true;
-    } else {
+    } else if (rcode != erc::ReturnCodeValue::RETCODE_OK) {
       log_error("FastDDSSubscriberMiddleware::on_data_available (",
           _topic_name, ") failed with code:", rcode());
     }
@@ -94,9 +98,15 @@ class FastDDSSubscriberMiddleware
   bool Init(
       const std::string& topic_name,
       void* message_ptr,
-      bool* new_message_flag) override {
+      bool* new_message_flag,
+      std::mutex* message_mutex) override {
     _message_ptr     = static_cast<msg_type*>(message_ptr);
     _new_message_ptr = new_message_flag;
+    _message_mutex   = message_mutex;
+    if (_message_mutex == nullptr) {
+      log_error("FastDDSSubscriberMiddleware: Missing mailbox mutex");
+      return false;
+    }
 
     if (_type == nullptr) {
       log_error("FastDDSSubscriberMiddleware: Invalid TypeSupport");
@@ -171,6 +181,7 @@ class FastDDSSubscriberMiddleware
 
   msg_type* _message_ptr     { nullptr };
   bool*     _new_message_ptr { nullptr };
+  std::mutex* _message_mutex { nullptr };
 
   std::string        _topic_name;
   std::atomic<bool>  _alive { false };

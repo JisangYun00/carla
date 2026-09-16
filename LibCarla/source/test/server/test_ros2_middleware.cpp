@@ -14,7 +14,7 @@
 #include <carla/ros2/middleware/MiddlewareFactory.h>
 #include <carla/ros2/middleware/IPublisherMiddleware.h>
 #include <carla/ros2/middleware/ISubscriberMiddleware.h>
-#include <carla/ros2/publishers/CarlaEgoVehiclePhysicalStatusPublisher.h>
+#include <carla/ros2/publishers/CarlaVehiclePhysicalStatusPublisher.h>
 #include <carla/ros2/publishers/CarlaIMUPublisher.h>
 #include <carla/ros2/publishers/HmcFeedbackPublisher.h>
 #include <carla/ros2/publishers/PublisherImpl.h>
@@ -29,6 +29,7 @@
 #include <cstdlib>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -94,15 +95,18 @@ class MockSubscriberMiddleware : public ISubscriberMiddleware {
   std::string last_topic_name;
   void* stored_message_ptr{nullptr};
   bool* stored_flag_ptr{nullptr};
+  std::mutex* stored_mutex_ptr{nullptr};
 
   bool Init(
       const std::string& topic_name,
       void* message_ptr,
-      bool* new_message_flag) override {
+      bool* new_message_flag,
+      std::mutex* message_mutex) override {
     init_called = true;
     last_topic_name = topic_name;
     stored_message_ptr = message_ptr;
     stored_flag_ptr = new_message_flag;
+    stored_mutex_ptr = message_mutex;
     return init_return_value;
   }
 
@@ -503,7 +507,7 @@ TEST(publisher_impl, init_passes_transient_local_qos) {
 }
 
 // ==========================================================================
-// Group 8: subscriber_impl (7 tests)
+// Group 8: subscriber_impl (8 tests)
 // ==========================================================================
 
 TEST(subscriber_impl, has_new_message_initially_false) {
@@ -521,6 +525,7 @@ TEST(subscriber_impl, init_delegates_to_middleware) {
   EXPECT_EQ(mock->last_topic_name, "rt/test_topic");
   EXPECT_NE(mock->stored_message_ptr, nullptr);
   EXPECT_NE(mock->stored_flag_ptr, nullptr);
+  EXPECT_NE(mock->stored_mutex_ptr, nullptr);
 }
 
 TEST(subscriber_impl, get_message_clears_flag) {
@@ -538,6 +543,24 @@ TEST(subscriber_impl, get_message_clears_flag) {
   TestMsg retrieved = sub.GetMessage();
   EXPECT_EQ(retrieved.value, 77);
   EXPECT_FALSE(sub.HasNewMessage());
+}
+
+TEST(subscriber_impl, take_message_returns_and_clears_mailbox) {
+  SubscriberImpl<TestSubTraits> sub;
+  auto* mock = new MockSubscriberMiddleware();
+  sub.SetMiddlewareForTesting(
+      std::unique_ptr<ISubscriberMiddleware>(mock));
+  ASSERT_TRUE(sub.Init("rt/test_topic"));
+
+  TestMsg sent;
+  sent.value = 99;
+  sub.SimulateMessageReceiptForTesting(sent);
+
+  TestMsg received;
+  EXPECT_TRUE(sub.TakeMessage(received));
+  EXPECT_EQ(received.value, 99);
+  EXPECT_FALSE(sub.HasNewMessage());
+  EXPECT_FALSE(sub.TakeMessage(received));
 }
 
 TEST(subscriber_impl, is_alive_delegates) {
@@ -601,7 +624,7 @@ TEST(cdr_topic_info, type_names_are_non_empty) {
   EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::CameraInfo>::type_name());
   EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaCollisionEvent>::type_name());
   EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaEgoVehicleControl>::type_name());
-  EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaEgoVehiclePhysicalStatus>::type_name());
+  EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaVehiclePhysicalStatus>::type_name());
   EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaLineInvasion>::type_name());
   EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::AckermannDriveStamped>::type_name());
   EXPECT_STRNE("", carla::ros2::CdrTopicInfo<carla::ros2::msg::TransformStamped>::type_name());
@@ -619,7 +642,7 @@ TEST(cdr_topic_info, max_sizes_are_positive) {
   EXPECT_GT(carla::ros2::CdrTopicInfo<carla::ros2::msg::NavSatFix>::max_serialized_size(), 0u);
   EXPECT_GT(carla::ros2::CdrTopicInfo<carla::ros2::msg::CameraInfo>::max_serialized_size(), 0u);
   EXPECT_GT(carla::ros2::CdrTopicInfo<carla::ros2::msg::AckermannDriveStamped>::max_serialized_size(), 0u);
-  EXPECT_GT(carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaEgoVehiclePhysicalStatus>::max_serialized_size(), 0u);
+  EXPECT_GT(carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaVehiclePhysicalStatus>::max_serialized_size(), 0u);
 }
 
 // ==========================================================================
@@ -873,7 +896,7 @@ TEST(cdr_serialization, carla_ego_vehicle_control_round_trip) {
 }
 
 TEST(cdr_serialization, carla_ego_vehicle_physical_status_round_trip) {
-  carla::ros2::msg::CarlaEgoVehiclePhysicalStatus original{};
+  carla::ros2::msg::CarlaVehiclePhysicalStatus original{};
   original.header.stamp.sec = 42;
   original.header.stamp.nanosec = 123456789u;
   original.header.frame_id = "hero";
@@ -889,14 +912,18 @@ TEST(cdr_serialization, carla_ego_vehicle_physical_status_round_trip) {
   original.vehicle_width_m = 1.95f;
   original.vehicle_length_m = 4.65f;
   original.vehicle_speed_kmh = 55.0f;
+  original.wheel_angular_velocity_fl_radps = 11.0f;
+  original.wheel_angular_velocity_fr_radps = 12.0f;
+  original.wheel_angular_velocity_rl_radps = 13.0f;
+  original.wheel_angular_velocity_rr_radps = 14.0f;
   original.ignition_status = true;
-  original.valid_signals = 0x0000000000001FF7ull;
+  original.valid_fields = 0x000000000001FFF7ull;
 
   auto buf = carla::ros2::serialize_to_cdr(original);
   ASSERT_FALSE(buf.empty());
-  EXPECT_EQ(buf.size(), 68u);
+  EXPECT_EQ(buf.size(), 84u);
 
-  carla::ros2::msg::CarlaEgoVehiclePhysicalStatus recovered{};
+  carla::ros2::msg::CarlaVehiclePhysicalStatus recovered{};
   EXPECT_TRUE(carla::ros2::deserialize_from_cdr(buf.data(), buf.size(), recovered));
   EXPECT_EQ(recovered.header.stamp.sec, 42);
   EXPECT_EQ(recovered.header.stamp.nanosec, 123456789u);
@@ -913,15 +940,19 @@ TEST(cdr_serialization, carla_ego_vehicle_physical_status_round_trip) {
   EXPECT_FLOAT_EQ(recovered.vehicle_width_m, 1.95f);
   EXPECT_FLOAT_EQ(recovered.vehicle_length_m, 4.65f);
   EXPECT_FLOAT_EQ(recovered.vehicle_speed_kmh, 55.0f);
+  EXPECT_FLOAT_EQ(recovered.wheel_angular_velocity_fl_radps, 11.0f);
+  EXPECT_FLOAT_EQ(recovered.wheel_angular_velocity_fr_radps, 12.0f);
+  EXPECT_FLOAT_EQ(recovered.wheel_angular_velocity_rl_radps, 13.0f);
+  EXPECT_FLOAT_EQ(recovered.wheel_angular_velocity_rr_radps, 14.0f);
   EXPECT_EQ(recovered.ignition_status, true);
-  EXPECT_EQ(recovered.valid_signals, 0x0000000000001FF7ull);
+  EXPECT_EQ(recovered.valid_fields, 0x000000000001FFF7ull);
 
   EXPECT_EQ(carla::ros2::cdr_serialized_size(original), static_cast<uint32_t>(buf.size()));
   EXPECT_STREQ(
-      carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaEgoVehiclePhysicalStatus>::type_hash(),
-      "RIHS01_855c6a5a002e659af2a3ef2346011e0a943b9c79a463ebd1734d000b4298ab1f");
+      carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaVehiclePhysicalStatus>::type_hash(),
+      "RIHS01_16d5f0f617a093703700abe8a36a157de846ee02267710ac70b5d2fb3d4987a2");
   EXPECT_GT(
-      carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaEgoVehiclePhysicalStatus>::max_serialized_size(),
+      carla::ros2::CdrTopicInfo<carla::ros2::msg::CarlaVehiclePhysicalStatus>::max_serialized_size(),
       static_cast<size_t>(buf.size()));
 }
 
@@ -1253,8 +1284,8 @@ TEST(generic_cdr_pubsubtype, type_name_matches_cdr_topic_info) {
       CdrTopicInfo<msg::CarlaEgoVehicleControl>::type_name(),
       GenericCdrPubSubType<msg::CarlaEgoVehicleControl>().getName());
   EXPECT_STREQ(
-      CdrTopicInfo<msg::CarlaEgoVehiclePhysicalStatus>::type_name(),
-      GenericCdrPubSubType<msg::CarlaEgoVehiclePhysicalStatus>().getName());
+      CdrTopicInfo<msg::CarlaVehiclePhysicalStatus>::type_name(),
+      GenericCdrPubSubType<msg::CarlaVehiclePhysicalStatus>().getName());
 }
 
 TEST(generic_cdr_pubsubtype, m_typesize_is_positive) {
@@ -1462,7 +1493,7 @@ TEST(generic_cdr_pubsubtype_large_payload, size_provider_returns_actual_size_not
 // ==========================================================================
 
 TEST(carla_ego_vehicle_physical_status_publisher, write_populates_all_fields) {
-  CarlaEgoVehiclePhysicalStatusPublisher publisher;
+  CarlaVehiclePhysicalStatusPublisher publisher;
 
   EXPECT_TRUE(publisher.Write(
       42, 123456789u, "hero",
@@ -1470,8 +1501,9 @@ TEST(carla_ego_vehicle_physical_status_publisher, write_populates_all_fields) {
       5u,
       0.125f, -1.5f, 2.25f, 12.5f,
       1.95f, 4.65f, 55.0f,
+      11.0f, 12.0f, 13.0f, 14.0f,
       true,
-      0x1FF7ull));
+      0x1FFF7ull));
 
   const auto* msg = publisher.GetMessageForTesting();
   ASSERT_NE(msg, nullptr);
@@ -1490,32 +1522,37 @@ TEST(carla_ego_vehicle_physical_status_publisher, write_populates_all_fields) {
   EXPECT_FLOAT_EQ(msg->vehicle_width_m, 1.95f);
   EXPECT_FLOAT_EQ(msg->vehicle_length_m, 4.65f);
   EXPECT_FLOAT_EQ(msg->vehicle_speed_kmh, 55.0f);
+  EXPECT_FLOAT_EQ(msg->wheel_angular_velocity_fl_radps, 11.0f);
+  EXPECT_FLOAT_EQ(msg->wheel_angular_velocity_fr_radps, 12.0f);
+  EXPECT_FLOAT_EQ(msg->wheel_angular_velocity_rl_radps, 13.0f);
+  EXPECT_FLOAT_EQ(msg->wheel_angular_velocity_rr_radps, 14.0f);
   EXPECT_EQ(msg->ignition_status, true);
-  EXPECT_EQ(msg->valid_signals, 0x1FF7ull);
+  EXPECT_EQ(msg->valid_fields, 0x1FFF7ull);
 }
 
 TEST(carla_ego_vehicle_physical_status_publisher, valid_mask_strips_reserved_bits) {
-  CarlaEgoVehiclePhysicalStatusPublisher publisher;
+  CarlaVehiclePhysicalStatusPublisher publisher;
 
-  // Only bits 0..12 are defined. Reserved bits 13..63 must be stripped by Write().
-  const uint64_t mask_with_reserved_set = 0xFFFFFFFFFFFFE000ull | 0x1FF7ull;
+  // Only bits 0..16 are defined. Reserved bits 17..63 must be stripped by Write().
+  const uint64_t mask_with_reserved_set = 0xFFFFFFFFFFFE0000ull | 0x1FFF7ull;
   EXPECT_TRUE(publisher.Write(
       0, 0u, "",
       false, false, false, false,
       0u,
       0.0f, 0.0f, 0.0f, 0.0f,
       0.0f, 0.0f, 0.0f,
+      0.0f, 0.0f, 0.0f, 0.0f,
       false,
       mask_with_reserved_set));
 
   const auto* msg = publisher.GetMessageForTesting();
   ASSERT_NE(msg, nullptr);
-  EXPECT_EQ(msg->valid_signals, 0x1FF7ull)
-      << "Write() must mask valid_signals to bits 0..12";
+  EXPECT_EQ(msg->valid_fields, 0x1FFF7ull)
+      << "Write() must mask valid_fields to bits 0..16";
 }
 
 TEST(carla_ego_vehicle_physical_status_publisher, cdr_round_trip_after_write) {
-  CarlaEgoVehiclePhysicalStatusPublisher publisher;
+  CarlaVehiclePhysicalStatusPublisher publisher;
 
   EXPECT_TRUE(publisher.Write(
       10, 500000000u, "vehicle",
@@ -1523,21 +1560,26 @@ TEST(carla_ego_vehicle_physical_status_publisher, cdr_round_trip_after_write) {
       3u,
       0.1f, -0.2f, 1.5f, 8.0f,
       1.9f, 4.5f, 30.0f,
+      1.0f, 2.0f, 3.0f, 4.0f,
       false,
-      0x0FF7ull));
+      0x0FFF7ull));
 
   const auto* msg = publisher.GetMessageForTesting();
   ASSERT_NE(msg, nullptr);
   const auto bytes = carla::ros2::serialize_to_cdr(*msg);
   ASSERT_FALSE(bytes.empty());
 
-  carla::ros2::msg::CarlaEgoVehiclePhysicalStatus recovered{};
+  carla::ros2::msg::CarlaVehiclePhysicalStatus recovered{};
   EXPECT_TRUE(carla::ros2::deserialize_from_cdr(bytes.data(), bytes.size(), recovered));
   EXPECT_EQ(recovered.header.stamp.sec, 10);
   EXPECT_EQ(recovered.header.frame_id, "vehicle");
   EXPECT_EQ(recovered.current_gear, 3u);
   EXPECT_FLOAT_EQ(recovered.vehicle_speed_kmh, 30.0f);
-  EXPECT_EQ(recovered.valid_signals, 0x0FF7ull);
+  EXPECT_FLOAT_EQ(recovered.wheel_angular_velocity_fl_radps, 1.0f);
+  EXPECT_FLOAT_EQ(recovered.wheel_angular_velocity_fr_radps, 2.0f);
+  EXPECT_FLOAT_EQ(recovered.wheel_angular_velocity_rl_radps, 3.0f);
+  EXPECT_FLOAT_EQ(recovered.wheel_angular_velocity_rr_radps, 4.0f);
+  EXPECT_EQ(recovered.valid_fields, 0x0FFF7ull);
 }
 
 // ==========================================================================
@@ -1556,11 +1598,12 @@ TEST(hmc_feedback_publisher_saturation, pct_boundary_and_nan) {
       0.0f, 0.0f,
       0u, 0u,
       false,
-      1u, 1u, 1u));
+      1u, 1u, 1u, 1u));
   const auto* msg = publisher.GetMessageForTesting();
   ASSERT_NE(msg, nullptr);
   EXPECT_EQ(msg->aps_fdb_pct, 0u);
   EXPECT_EQ(msg->bps_fdb_pct, 0u);
+  EXPECT_EQ(msg->stop_hold_ready, 1u);
 
   EXPECT_TRUE(publisher.Write(
       1u,
@@ -1569,7 +1612,7 @@ TEST(hmc_feedback_publisher_saturation, pct_boundary_and_nan) {
       0.0f, 0.0f,
       0u, 0u,
       false,
-      1u, 1u, 1u));
+      1u, 1u, 1u, 1u));
   const auto* msg2 = publisher.GetMessageForTesting();
   ASSERT_NE(msg2, nullptr);
   EXPECT_EQ(msg2->aps_fdb_pct, 1023u)
@@ -1588,7 +1631,7 @@ TEST(hmc_feedback_publisher_saturation, int16_boundary_and_infinite) {
       4000.0f, -4000.0f,
       0u, 0u,
       false,
-      1u, 1u, 1u));
+      1u, 1u, 1u, 1u));
   const auto* msg = publisher.GetMessageForTesting();
   ASSERT_NE(msg, nullptr);
   EXPECT_EQ(msg->actual_speed_kmh, 32767)
@@ -1605,7 +1648,7 @@ TEST(hmc_feedback_publisher_saturation, int16_boundary_and_infinite) {
       -12.5f, 0.0f,
       0u, 0u,
       false,
-      1u, 1u, 1u));
+      1u, 1u, 1u, 1u));
   const auto* msg2 = publisher.GetMessageForTesting();
   ASSERT_NE(msg2, nullptr);
   EXPECT_EQ(msg2->actual_speed_kmh, 0)
@@ -1624,7 +1667,7 @@ TEST(hmc_feedback_publisher_saturation, rounding_matches_tenth_factor) {
       0.0f, 0.0f,
       0u, 0u,
       false,
-      1u, 1u, 1u));
+      1u, 1u, 1u, 1u));
   const auto* msg = publisher.GetMessageForTesting();
   ASSERT_NE(msg, nullptr);
   EXPECT_EQ(msg->aps_fdb_pct, 124u)  // round(12.35 * 10) = 124

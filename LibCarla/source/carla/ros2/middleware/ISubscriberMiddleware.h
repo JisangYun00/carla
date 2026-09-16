@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <mutex>
 #include <string>
 
 namespace carla {
@@ -24,14 +25,17 @@ class ISubscriberMiddleware {
 
   /// Initialize the underlying middleware entities.
   /// The middleware writes incoming messages to *message_ptr and sets *new_message_flag = true.
+  /// message_mutex serializes that write with SubscriberImpl consumption.
   /// @param topic_name       Full topic name.
   /// @param message_ptr      Pointer to the message storage owned by SubscriberImpl<S>.
   /// @param new_message_flag Pointer to the new-message flag owned by SubscriberImpl<S>.
+  /// @param message_mutex    Mutex owned by SubscriberImpl<S> for the mailbox.
   /// @return true on success.
   virtual bool Init(
       const std::string& topic_name,
       void* message_ptr,
-      bool* new_message_flag) = 0;
+      bool* new_message_flag,
+      std::mutex* message_mutex) = 0;
 
   /// @return true if at least one publisher is matched.
   virtual bool IsAlive() const = 0;

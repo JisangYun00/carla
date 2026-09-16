@@ -17,7 +17,7 @@
 #include "carla/ros2/types/msg/CameraInfo.h"
 #include "carla/ros2/types/msg/CarlaCollisionEvent.h"
 #include "carla/ros2/types/msg/CarlaEgoVehicleControl.h"
-#include "carla/ros2/types/msg/CarlaEgoVehiclePhysicalStatus.h"
+#include "carla/ros2/types/msg/CarlaVehiclePhysicalStatus.h"
 #include "carla/ros2/types/msg/CarlaLineInvasion.h"
 #include "carla/ros2/types/msg/Clock.h"
 #include "carla/ros2/types/msg/Float32.h"
@@ -483,10 +483,10 @@ inline void deserialize_cdr(
 
 // --
 
-/// CarlaEgoVehiclePhysicalStatus: fixed-size chassis/geometry snapshot.
+/// CarlaVehiclePhysicalStatus: fixed-size chassis/geometry snapshot.
 /// Field order must match the .msg definition exactly.
 inline void serialize_cdr(
-    eprosima::fastcdr::Cdr& cdr, const msg::CarlaEgoVehiclePhysicalStatus& m) {
+    eprosima::fastcdr::Cdr& cdr, const msg::CarlaVehiclePhysicalStatus& m) {
   serialize_cdr(cdr, m.header);
   cdr << m.brake_status;
   cdr << m.abs_status;
@@ -500,12 +500,16 @@ inline void serialize_cdr(
   cdr << m.vehicle_width_m;
   cdr << m.vehicle_length_m;
   cdr << m.vehicle_speed_kmh;
+  cdr << m.wheel_angular_velocity_fl_radps;
+  cdr << m.wheel_angular_velocity_fr_radps;
+  cdr << m.wheel_angular_velocity_rl_radps;
+  cdr << m.wheel_angular_velocity_rr_radps;
   cdr << m.ignition_status;
-  cdr << m.valid_signals;
+  cdr << m.valid_fields;
 }
 
 inline void deserialize_cdr(
-    eprosima::fastcdr::Cdr& cdr, msg::CarlaEgoVehiclePhysicalStatus& m) {
+    eprosima::fastcdr::Cdr& cdr, msg::CarlaVehiclePhysicalStatus& m) {
   deserialize_cdr(cdr, m.header);
   cdr >> m.brake_status;
   cdr >> m.abs_status;
@@ -519,8 +523,12 @@ inline void deserialize_cdr(
   cdr >> m.vehicle_width_m;
   cdr >> m.vehicle_length_m;
   cdr >> m.vehicle_speed_kmh;
+  cdr >> m.wheel_angular_velocity_fl_radps;
+  cdr >> m.wheel_angular_velocity_fr_radps;
+  cdr >> m.wheel_angular_velocity_rl_radps;
+  cdr >> m.wheel_angular_velocity_rr_radps;
   cdr >> m.ignition_status;
-  cdr >> m.valid_signals;
+  cdr >> m.valid_fields;
 }
 
 // --

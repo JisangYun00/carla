@@ -12,7 +12,7 @@ set(MSG_FILES
     CarlaEgoVehicleControl.msg
     CarlaEgoVehicleInfoWheel.msg
     CarlaEgoVehicleInfo.msg
-    CarlaEgoVehiclePhysicalStatus.msg
+    CarlaVehiclePhysicalStatus.msg
     CarlaEgoVehicleStatus.msg
     CarlaCollisionEvent.msg
     CarlaLaneInvasionEvent.msg

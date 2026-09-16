@@ -49,7 +49,8 @@ bool HmcFeedbackPublisher::Write(
     bool actuator_fault,
     uint8_t lng_ctrl_ready,
     uint8_t lat_ctrl_ready,
-    uint8_t gear_sel_ready) {
+    uint8_t gear_sel_ready,
+    uint8_t stop_hold_ready) {
   auto* msg = _impl->GetMessage();
   if (!msg) {
     return false;
@@ -62,7 +63,7 @@ bool HmcFeedbackPublisher::Write(
   msg->lng_ctrl_type_active = 0u;  // [VERIFY] active control type mapping
   msg->lat_ctrl_type_active = 0u;
   msg->gear_sel_ready = clamp_ready(gear_sel_ready);
-  msg->stop_hold_ready = 0u;
+  msg->stop_hold_ready = clamp_ready(stop_hold_ready);
   msg->actuator_fault_sta = actuator_fault ? 1u : 0u;
   msg->lng_op_mode = lng_op_mode;
   msg->lat_op_mode = lat_op_mode;

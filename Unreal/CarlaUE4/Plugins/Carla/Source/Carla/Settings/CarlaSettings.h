@@ -175,7 +175,7 @@ public:
       EditAnywhere,
       config,
       DisplayName = "  ROS2 Middleware")
-  FString ROS2MiddlewareName = TEXT("fastdds");
+  FString ROS2MiddlewareName = TEXT("cyclonedds");
 
   /// ROS2 domain id. Set via --ros-domain-id=<N> on the command line.
   /// -1 (the default) keeps each middleware's native default domain.

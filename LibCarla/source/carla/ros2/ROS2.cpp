@@ -36,7 +36,7 @@
 #include "publishers/CarlaSSCameraPublisher.h"
 #include "publishers/CarlaTransformPublisher.h"
 #include "publishers/HmcFeedbackPublisher.h"
-#include "publishers/CarlaEgoVehiclePhysicalStatusPublisher.h"
+#include "publishers/CarlaVehiclePhysicalStatusPublisher.h"
 
 #include "subscribers/AckermannControlSubscriber.h"
 #include "subscribers/CarlaEgoVehicleControlSubscriber.h"
@@ -159,11 +159,11 @@ void ROS2::SetTimestamp(double timestamp) {
   const int64_t elapsed_ns = current_timestamp_ns - _last_ego_vehicle_physical_status_timestamp_ns;
   const bool should_publish_physical_status =
       (_last_ego_vehicle_physical_status_timestamp_ns < 0) ||
-      (elapsed_ns >= kEgoVehiclePhysicalStatusPeriodNs) ||
-      (elapsed_ns < kEgoVehiclePhysicalStatusRewindThresholdNs);
+      (elapsed_ns >= kVehiclePhysicalStatusPeriodNs) ||
+      (elapsed_ns < kVehiclePhysicalStatusRewindThresholdNs);
   if (should_publish_physical_status) {
     if (!_ego_vehicle_physical_status_publisher) {
-      _ego_vehicle_physical_status_publisher = std::make_shared<CarlaEgoVehiclePhysicalStatusPublisher>();
+      _ego_vehicle_physical_status_publisher = std::make_shared<CarlaVehiclePhysicalStatusPublisher>();
     }
     for (auto& pair : _ego_vehicle_physical_status_callbacks) {
       pair.second();
@@ -191,7 +191,8 @@ void ROS2::PublishHmcFeedback(
     bool actuator_fault,
     uint8_t lng_ctrl_ready,
     uint8_t lat_ctrl_ready,
-    uint8_t gear_sel_ready) {
+    uint8_t gear_sel_ready,
+    uint8_t stop_hold_ready) {
   static bool env_initialized = false;
   static uint8_t env_lng_ready = 1u;
   static uint8_t env_lat_ready = 1u;
@@ -229,11 +230,12 @@ void ROS2::PublishHmcFeedback(
       actuator_fault,
       and_ready(lng_ctrl_ready, env_lng_ready),
       and_ready(lat_ctrl_ready, env_lat_ready),
-      and_ready(gear_sel_ready, env_gear_ready));
+      and_ready(gear_sel_ready, env_gear_ready),
+      stop_hold_ready);
   _hmc_feedback_publisher->Publish();
 }
 
-void ROS2::PublishEgoVehiclePhysicalStatus(
+void ROS2::PublishVehiclePhysicalStatus(
     void *actor,
     const std::string& frame_id,
     bool brake_status,
@@ -248,14 +250,18 @@ void ROS2::PublishEgoVehiclePhysicalStatus(
     float vehicle_width_m,
     float vehicle_length_m,
     float vehicle_speed_kmh,
+    float wheel_angular_velocity_fl_radps,
+    float wheel_angular_velocity_fr_radps,
+    float wheel_angular_velocity_rl_radps,
+    float wheel_angular_velocity_rr_radps,
     bool ignition_status,
-    uint64_t valid_signals) {
+    uint64_t valid_fields) {
   std::lock_guard<std::recursive_mutex> lock(_mutex);
   if (!_enabled || _actor_callbacks.find(actor) == _actor_callbacks.end()) {
     return;
   }
   if (!_ego_vehicle_physical_status_publisher) {
-    _ego_vehicle_physical_status_publisher = std::make_shared<CarlaEgoVehiclePhysicalStatusPublisher>();
+    _ego_vehicle_physical_status_publisher = std::make_shared<CarlaVehiclePhysicalStatusPublisher>();
   }
   _ego_vehicle_physical_status_publisher->Write(
       _seconds, _nanoseconds, frame_id,
@@ -268,13 +274,17 @@ void ROS2::PublishEgoVehiclePhysicalStatus(
       vehicle_width_m,
       vehicle_length_m,
       vehicle_speed_kmh,
+      wheel_angular_velocity_fl_radps,
+      wheel_angular_velocity_fr_radps,
+      wheel_angular_velocity_rl_radps,
+      wheel_angular_velocity_rr_radps,
       ignition_status,
-      valid_signals);
+      valid_fields);
   _ego_vehicle_physical_status_publisher->Publish();
 }
 
-void ROS2::RegisterEgoVehiclePhysicalStatusCallback(
-    void* actor, ROS2::EgoVehiclePhysicalStatusCallback callback) {
+void ROS2::RegisterVehiclePhysicalStatusCallback(
+    void* actor, ROS2::VehiclePhysicalStatusCallback callback) {
   std::lock_guard<std::recursive_mutex> lock(_mutex);
   if (!actor || !callback) return;
   _ego_vehicle_physical_status_callbacks[actor] = std::move(callback);

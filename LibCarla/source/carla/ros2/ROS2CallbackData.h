@@ -33,6 +33,12 @@ namespace ros2 {
     // HMC commands carry physical steering-wheel degrees; native CARLA
     // commands keep normalized steer in [-1, 1].
     bool    steer_is_steering_wheel_angle {false};
+    // HMC AD-01 carries a speed target, unlike the native CARLA pedal command.
+    bool    hmc_command {false};
+    bool    speed_control {false};
+    bool    ad01_fresh {false};
+    bool    emergency_brake {false};
+    float   target_speed_kmh {0.0f};
   };
 
   struct AckermannControl
