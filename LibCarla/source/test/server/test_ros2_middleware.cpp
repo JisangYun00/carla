@@ -17,6 +17,7 @@
 #include <carla/ros2/publishers/CarlaVehiclePhysicalStatusPublisher.h>
 #include <carla/ros2/publishers/CarlaIMUPublisher.h>
 #include <carla/ros2/publishers/HmcFeedbackPublisher.h>
+#include <carla/ros2/HmcVirtualSteeringActuator.h>
 #include <carla/ros2/publishers/PublisherImpl.h>
 #include <carla/ros2/subscribers/SubscriberImpl.h>
 #include <carla/ros2/middleware/fastdds/GenericCdrPubSubType.h>
@@ -1902,3 +1903,32 @@ TEST_F(ZenohDomainIdFixture, invalid_environment_falls_back_to_default) {
   EXPECT_EQ(zenoh_ros_domain_id(), "0");
 }
 #endif  // _WIN32
+
+// ===========================================================================
+// HMC virtual steering actuator
+// ===========================================================================
+
+TEST(hmc_virtual_steering_actuator, publishes_a_measured_delay_not_raw_target) {
+  HmcVirtualSteeringActuator actuator;
+  actuator.ObserveTarget(400.0f, 1.0);
+  actuator.Advance(1.149);
+  EXPECT_FLOAT_EQ(actuator.GetActualSwaDeg(), 0.0f);
+  actuator.Advance(1.150);
+  EXPECT_FLOAT_EQ(actuator.GetActualSwaDeg(), 400.0f);
+}
+
+TEST(hmc_virtual_steering_actuator, replays_a_changing_command_history) {
+  HmcVirtualSteeringActuator actuator;
+  actuator.ObserveTarget(100.0f, 1.00);
+  actuator.ObserveTarget(300.0f, 1.05);
+  actuator.Advance(1.20);
+  EXPECT_FLOAT_EQ(actuator.GetActualSwaDeg(), 300.0f);
+}
+
+TEST(hmc_virtual_steering_actuator, accepts_a_vehicle_specific_delay) {
+  HmcVirtualSteeringActuator actuator;
+  actuator.SetResponseDelaySec(0.05);
+  actuator.ObserveTarget(100.0f, 1.0);
+  actuator.Advance(1.05);
+  EXPECT_FLOAT_EQ(actuator.GetActualSwaDeg(), 100.0f);
+}
