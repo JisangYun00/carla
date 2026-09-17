@@ -28,7 +28,6 @@
 #include <compiler/disable-ue4-macros.h>
 #include "carla/ros2/ROS2.h"
 #include <compiler/enable-ue4-macros.h>
-#include <carla/ros2/HmcVirtualSteeringActuator.h>
 
 /// visitor class
 class ActorROS2Handler
@@ -52,7 +51,6 @@ class ActorROS2Handler
         // otherwise Safety's startup fail-safe cannot issue that first AD-01.
         float _last_target_swa_deg {0.0f};
         bool _has_target_swa_echo {true};
-        carla::ros2::HmcVirtualSteeringActuator _virtual_steering_actuator;
         bool _last_stop_hold {false};
         uint8_t _last_target_gear {0x03}; // Neutral
         float _speed_integral_kmh_sec {0.0f};

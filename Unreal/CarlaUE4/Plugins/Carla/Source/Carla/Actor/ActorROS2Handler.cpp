@@ -65,9 +65,14 @@ float GetMaxSwaCalibration() {
   return max_swa;
 }
 
-float GetVirtualSwaDelaySec() {
-  // 150 ms is the measured 10%-response delay for ±100..600 deg AD-01 steps.
-  return GetPositiveHmcEnv("CARLA_HMC_SWA_DELAY_MS", 150.0f) * 0.001f;
+// Steering-column angle equivalent to the measured front-wheel angles. CARLA
+// has no steering-column sensor, so Safety compares its AD-01 target against
+// this measurement rather than against an echo of its own command.
+float MeasuredSwaDeg(ACarlaWheeledVehicle* Vehicle, float SteeringRatio) {
+  const float Fl = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FL_Wheel);
+  const float Fr = Vehicle->GetWheelSteerAngle(EVehicleWheelLocation::FR_Wheel);
+  if (!FMath::IsFinite(Fl) || !FMath::IsFinite(Fr)) return NAN;
+  return (Fl + Fr) * 0.5f * SteeringRatio;
 }
 
 } // namespace
@@ -214,21 +219,15 @@ void ActorROS2Handler::PublishVehiclePhysicalStatus()
   }
 
   // ---------------------------------------------------------------------------
-  // CARLA exposes front-wheel angles but no steering-column sensor. Publish the
-  // virtual steering-actuator state as steering-wheel feedback; front-wheel
-  // physics remains independent from this HMC SWA signal.
+  // Steering-wheel angle derived from the measured front wheels.
   // ---------------------------------------------------------------------------
-  int32_t SteeringSec = 0;
-  uint32_t SteeringNsec = 0u;
-  ROS2->GetTimestamp(SteeringSec, SteeringNsec);
-  const double SteeringNow = static_cast<double>(SteeringSec) +
-      static_cast<double>(SteeringNsec) * 1e-9;
-  _virtual_steering_actuator.SetResponseDelaySec(GetVirtualSwaDelaySec());
-  _virtual_steering_actuator.Advance(SteeringNow);
-  const float VirtualSwaDeg = _virtual_steering_actuator.GetActualSwaDeg();
-  if (FMath::IsFinite(VirtualSwaDeg)) {
-    SteeringWheelAngleDeg = VirtualSwaDeg;
-    ValidFields |= (1u << 8);  // steering_wheel_angle_deg
+  const float PhysicalSteeringRatio = GetSteeringRatioCalibration();
+  if (PhysicalSteeringRatio > 0.0f && FMath::IsFinite(PhysicalSteeringRatio)) {
+    const float MeasuredDeg = MeasuredSwaDeg(Vehicle, PhysicalSteeringRatio);
+    if (FMath::IsFinite(MeasuredDeg)) {
+      SteeringWheelAngleDeg = MeasuredDeg;
+      ValidFields |= (1u << 8);  // steering_wheel_angle_deg
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -277,19 +276,6 @@ void ActorROS2Handler::operator()(carla::ros2::VehicleControl &Source)
         FMath::IsFinite(MaxSwaDeg) && MaxSwaDeg > 0.0f
             ? FMath::Clamp(Source.steer / MaxSwaDeg, -1.0f, 1.0f)
             : 0.0f;
-  }
-
-  if (Source.hmc_command && Source.steer_is_steering_wheel_angle) {
-    auto ROS2 = carla::ros2::ROS2::GetInstance();
-    if (ROS2) {
-      int32_t Sec = 0;
-      uint32_t Nsec = 0u;
-      ROS2->GetTimestamp(Sec, Nsec);
-      const double Now = static_cast<double>(Sec) + static_cast<double>(Nsec) * 1e-9;
-      _virtual_steering_actuator.SetResponseDelaySec(GetVirtualSwaDelaySec());
-      _virtual_steering_actuator.ObserveTarget(Source.steer, Now);
-      _virtual_steering_actuator.Advance(Now);
-    }
   }
 
   float Throttle = Source.throttle;
@@ -384,9 +370,6 @@ void ActorROS2Handler::PublishHmcFeedback()
   // FB-01 reports speed magnitude; direction is represented by actual gear.
   const float SpeedKmh = FMath::Abs(Vehicle->GetVehicleForwardSpeed()) * 0.036f;
 
-  // CARLA does not expose a steering-column sensor. FB-01 therefore reports
-  // the delayed virtual actuator position; the wheel angles stay a separate
-  // physical signal and must not be relabelled as steering-wheel feedback.
   const float SteeringRatio = GetSteeringRatioCalibration();
   const bool bCalibrationValid =
       SteeringRatio > 0.0f && FMath::IsFinite(SteeringRatio);
@@ -394,10 +377,9 @@ void ActorROS2Handler::PublishHmcFeedback()
   uint32_t Nsec = 0u;
   ROS2->GetTimestamp(Sec, Nsec);
   const double Now = static_cast<double>(Sec) + static_cast<double>(Nsec) * 1e-9;
-  _virtual_steering_actuator.SetResponseDelaySec(GetVirtualSwaDelaySec());
-  _virtual_steering_actuator.Advance(Now);
 
-  const float ActualSwaDeg = _virtual_steering_actuator.GetActualSwaDeg();
+  const float ActualSwaDeg =
+      bCalibrationValid ? MeasuredSwaDeg(Vehicle, SteeringRatio) : NAN;
   const float TargetSwaEchoDeg = _last_target_swa_deg;
   const bool bActualSwaValid = FMath::IsFinite(ActualSwaDeg);
   const bool bTargetSwaEchoValid =
