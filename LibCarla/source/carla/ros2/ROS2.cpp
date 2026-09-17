@@ -219,9 +219,9 @@ void ROS2::PublishHmcFeedback(
       lng_op_mode,
       lat_op_mode,
       actuator_fault,
-      env_lng_ready == 1u ? lng_ctrl_ready : 0u,
-      env_lat_ready == 1u ? lat_ctrl_ready : 0u,
-      env_gear_ready == 1u ? gear_sel_ready : 0u,
+      static_cast<uint8_t>(env_lng_ready == 1u ? lng_ctrl_ready : 0u),
+      static_cast<uint8_t>(env_lat_ready == 1u ? lat_ctrl_ready : 0u),
+      static_cast<uint8_t>(env_gear_ready == 1u ? gear_sel_ready : 0u),
       stop_hold_ready};
 }
 

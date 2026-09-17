@@ -191,18 +191,10 @@ void ActorROS2Handler::PublishVehiclePhysicalStatus()
     _has_last_global_velocity = true;
   }
 
-  // CARLA fixes the PhysX wheel indices as FL, FR, RL, RR (0..3).
-  const FVehicleTelemetryData Telemetry = Vehicle->GetVehicleTelemetryData();
-  if (Telemetry.Wheels.Num() >= 4) {
-    WheelAngularVelocityFlRadps = Telemetry.Wheels[0].Omega;
-    WheelAngularVelocityFrRadps = Telemetry.Wheels[1].Omega;
-    WheelAngularVelocityRlRadps = Telemetry.Wheels[2].Omega;
-    WheelAngularVelocityRrRadps = Telemetry.Wheels[3].Omega;
-    if (FMath::IsFinite(WheelAngularVelocityFlRadps)) ValidFields |= (1u << 12);
-    if (FMath::IsFinite(WheelAngularVelocityFrRadps)) ValidFields |= (1u << 13);
-    if (FMath::IsFinite(WheelAngularVelocityRlRadps)) ValidFields |= (1u << 14);
-    if (FMath::IsFinite(WheelAngularVelocityRrRadps)) ValidFields |= (1u << 15);
-  }
+  // Do not call GetVehicleTelemetryData here. It dereferences the PhysX
+  // PVehicle before it exists during actor initialization and can crash CARLA.
+  // Wheel angular velocity fields remain invalid (their values stay zero) until
+  // CARLA exposes a lifecycle-safe public API for this data.
 
   // ---------------------------------------------------------------------------
   // Geometry validity: positive finite dimensions only.

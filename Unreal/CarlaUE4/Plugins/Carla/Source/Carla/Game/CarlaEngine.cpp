@@ -306,23 +306,11 @@ void FCarlaEngine::NotifyBeginEpisode(UCarlaEpisode &Episode)
     auto ROS2 = carla::ros2::ROS2::GetInstance();
     if (ROS2->IsEnabled())
     {
-      // HMC workaround: the custom CycloneDDS CDR passthrough crashes in
-      // ddsi_serdata_init when publishing the latched OpenDRIVE map sample.
-      // Skip it entirely until the sertype initialization is aligned with
-      // the vendored CycloneDDS 0.10.5 build. The map topic is not required
-      // for the HMC control loop.
-      #if defined(WITH_ROS2_CYLONEDDS)
-      {
-        // Do not publish the latched map under CycloneDDS.
-      }
-      #else
-      {
-        // Latched rt/carla/map sample; re-published on every map load so late
-        // joiners always receive the OpenDRIVE description of the current map.
-        const FString XODR = UOpenDrive::GetXODR(World);
-        ROS2->ProcessDataFromMap(std::string(TCHAR_TO_UTF8(*XODR)));
-      }
-      #endif
+      // Latched rt/carla/map sample; re-published on every map load so late
+      // joiners always receive the OpenDRIVE description of the current map.
+      // ProcessDataFromMap skips the publish under CycloneDDS.
+      const FString XODR = UOpenDrive::GetXODR(World);
+      ROS2->ProcessDataFromMap(std::string(TCHAR_TO_UTF8(*XODR)));
     }
   }
   #endif
