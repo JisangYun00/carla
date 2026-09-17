@@ -15,7 +15,7 @@ namespace carla {
 namespace ros2 {
 
   // HMC FB-01 motion control status feedback publisher.
-  // Publishes vehicle state on fixed topic rt/hmc/fb/fb01.
+  // Publishes vehicle state on fixed topic rt/hmc/fb01.
   class HmcFeedbackPublisher : public BasePublisher {
     public:
       struct FB01MsgTraits {
@@ -23,10 +23,10 @@ namespace ros2 {
       };
 
       HmcFeedbackPublisher() :
-        BasePublisher("rt/vehicle/fb"),
+        BasePublisher("rt/hmc/fb"),
         _impl(std::make_shared<PublisherImpl<FB01MsgTraits>>()) {
-          if (!_impl->Init("rt/vehicle/fb01")) {
-            log_warning("HmcFeedbackPublisher: Init failed for topic: rt/vehicle/fb01");
+          if (!_impl->Init(GetBaseTopicName() + "01")) {
+            log_warning("HmcFeedbackPublisher: Init failed for topic: ", GetBaseTopicName(), "01");
           }
       }
 
